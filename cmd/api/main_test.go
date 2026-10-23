@@ -9,8 +9,12 @@ import (
 	"testing"
 )
 
+// testVersion intentionally differs from the "dev" default so the test
+// fails if the handler ignores the injected version.
+const testVersion = "v9.9.9-test"
+
 func TestRoutes(t *testing.T) {
-	srv := httptest.NewServer(routes())
+	srv := httptest.NewServer(routes(testVersion))
 	defer srv.Close()
 
 	tests := []struct {
@@ -120,7 +124,7 @@ func TestRoutes(t *testing.T) {
 					t.Fatalf("body is not valid JSON: %v (body: %q)", err, body)
 				}
 
-				want := healthResponse{Status: "ok", Version: version}
+				want := healthResponse{Status: "ok", Version: testVersion}
 				if got != want {
 					t.Errorf("unexpected body: want %+v, got %+v", want, got)
 				}
