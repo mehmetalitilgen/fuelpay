@@ -9,13 +9,28 @@ import (
 	"time"
 )
 
-type healthResponse struct{
-	Status string `json:"status"`
+type healthResponse struct {
+	Status  string `json:"status"`
 	Version string `json:"version"`
-
 }
 
 var version = "dev"
+
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	err := json.NewEncoder(w).Encode(healthResponse{Status: "ok", Version: version})
+	if err != nil {
+		slog.Error("healthz: failed to encode response:", "error", err)
+		return
+	}
+
+}
+
+func routes() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", healthzHandler)
+	return mux
+}
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -27,30 +42,19 @@ func main() {
 		addr = "localhost:8080"
 	}
 
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		err := json.NewEncoder(w).Encode(healthResponse{Status: "ok",Version: version})
-		if err != nil {
-			slog.Error("healthz: failed to encode response:","error", err)
-			return
-		}
-    })
-
 	s := &http.Server{
 		Addr:           addr,
-		Handler:        mux,
+		Handler:        routes(),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	slog.Info("Server is starting...","Address",addr)
+	slog.Info("Server is starting...", "Address", addr)
 
 	err := s.ListenAndServe()
 
 	if err != nil {
-		slog.Error("Server Error","Error",err)
+		slog.Error("Server Error", "Error", err)
 	}
 }
