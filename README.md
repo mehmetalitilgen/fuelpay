@@ -8,16 +8,16 @@ FuelPay API servisi. Şu an tek bir sağlık kontrolü uç noktası (`GET /healt
 
 ## Yapılandırma
 
-| Değişken    | Açıklama                    | Varsayılan       |
-|-------------|-----------------------------|------------------|
-| `HTTP_ADDR` | Sunucunun dinleyeceği adres | `localhost:8080` |
+| Değişken    | Açıklama                    | Varsayılan |
+|-------------|-----------------------------|------------|
+| `HTTP_ADDR` | Sunucunun dinleyeceği adres | `:8080`    |
 
 > Not: Servis `.env` dosyasını kendisi okumaz. Oradaki değerleri kullanmak için
 > değişkeni çalıştırmadan önce kabuğa aktarın (aşağıdaki örneklere bakın).
 
 ## Çalıştırma
 
-Varsayılan adresle (`localhost:8080`):
+Varsayılan adresle (`:8080`):
 
 ```sh
 go run ./cmd/api
@@ -46,10 +46,10 @@ go test ./...
 go vet ./...
 ```
 
-Çalışan servisi elle kontrol etmek için:
+Çalışan servisi elle kontrol etmek için (PowerShell'de `curl` bir alias'tır, `curl.exe` kullanın):
 
 ```sh
-curl http://localhost:8080/healthz
+curl.exe -i http://localhost:8080/healthz
 ```
 
 Beklenen yanıt:
