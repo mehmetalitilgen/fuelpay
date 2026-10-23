@@ -1,0 +1,32 @@
+# Build çıktıları
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test çıktıları
+*.test
+*.out
+coverage.*
+*.coverprofile
+
+# Go workspace
+go.work
+go.work.sum
+
+# Ortam değişkenleri
+.env
+.env.*
+!.env.example
+
+# Editör / IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
