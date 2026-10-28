@@ -29,10 +29,10 @@ Doğrulama kuralları:
 - Tüm süreler sıfırdan büyük olmalı.
 - `HTTP_READ_TIMEOUT`, `HTTP_READ_HEADER_TIMEOUT` değerinden küçük olamaz.
 
-Geçersiz değerler varsa servis başlamaz ve hataların tamamı tek bir log satırında raporlanır:
+Geçersiz değerler varsa servis port açmadan çıkar (exit code `1`) ve hataların tamamı tek bir JSON log satırında raporlanır:
 
-```text
-ERROR application terminated err="load config: SHUTDOWN_TIMEOUT: time: invalid duration \"abc\"\nLOG_LEVEL: must be one of: debug, info, warn, error"
+```json
+{"level":"ERROR","msg":"application terminated","err":"load config: SHUTDOWN_TIMEOUT: time: invalid duration \"abc\"\nLOG_LEVEL: must be one of: debug, info, warn, error"}
 ```
 
 > Not: Servis `.env` dosyasını kendisi okumaz. Oradaki değerleri kullanmak için
@@ -78,19 +78,19 @@ set -a; source .env; set +a
 go run ./cmd/api
 ```
 
-Sunucu loglarını JSON olarak standart çıktıya yazar. Başlangıçta kullanılan
-adresi, süre sınırlarını ve log seviyesini içeren bir `http server listening` satırı loglanır.
+Sunucu loglarını JSON olarak standart çıktıya yazar. Port açıldıktan sonra dinlenen
+adresi, sürümü, süre sınırlarını ve log seviyesini içeren bir `http server listening` satırı loglanır.
 
 ## Kapanış (graceful shutdown)
 
 Servis `SIGINT` (Ctrl+C) veya `SIGTERM` aldığında düzgün şekilde kapanır:
 
-1. `shutting down` loglanır ve yeni bağlantı kabul edilmez.
+1. `shutdown started` loglanır (`reason` alanında sinyal adı yer alır) ve yeni bağlantı kabul edilmez.
 2. Devam eden istekler en fazla `SHUTDOWN_TIMEOUT` süresince tamamlanmaya bırakılır.
    Boştaki keep-alive bağlantıları hemen kapatılır.
-3. Tüm istekler bu süre içinde biterse `server stopped` loglanır.
-4. Süre dolarsa `graceful shutdown: context deadline exceeded` hatası loglanır
-   ve süreç kalan bağlantıları beklemeden kapanır.
+3. Tüm istekler bu süre içinde biterse `server stopped` loglanır ve süreç `0` ile çıkar.
+4. Süre dolarsa kalan bağlantılar zorla kapatılır, `graceful shutdown: context deadline exceeded`
+   hatası loglanır ve süreç `1` ile çıkar.
 
 Kapanış sırasında ikinci bir Ctrl+C veya `SIGTERM` gelirse süreç beklemeden hemen sonlanır.
 
@@ -110,6 +110,18 @@ Birim testleri ve statik analiz:
 ```sh
 go test ./...
 go vet ./...
+```
+
+Race detector (Windows'ta CGO ve gcc gerekir):
+
+```sh
+# bash
+CGO_ENABLED=1 go test -race -count=10 ./...
+```
+
+```powershell
+# PowerShell
+$env:CGO_ENABLED = "1"; go test -race -count=10 ./...
 ```
 
 Çalışan servisi elle kontrol etmek için (PowerShell'de `curl` bir alias'tır, `curl.exe` kullanın):

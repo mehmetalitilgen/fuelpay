@@ -3,6 +3,7 @@
 - **Durum:** Accepted
 - **Tarih:** 2026-10-23
 - **Ticket:** FTSM-001
+- **Not:** Layout kararı ve sabit timeout'lar [ADR 0002](0002-config-and-graceful-shutdown.md) ile güncellendi.
 
 ## Context
 

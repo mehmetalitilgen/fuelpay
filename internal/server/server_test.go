@@ -14,7 +14,7 @@ import (
 const testVersion = "v9.9.9-test"
 
 func TestRoutes(t *testing.T) {
-	srv := httptest.NewServer(routes(testVersion))
+	srv := httptest.NewServer(Routes(testVersion))
 	defer srv.Close()
 
 	tests := []struct {
