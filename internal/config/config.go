@@ -11,21 +11,36 @@ import (
 )
 
 type Config struct {
-	HTTP_ADDR                string
-	HTTP_READ_HEADER_TIMEOUT time.Duration
-	HTTP_READ_TIMEOUT        time.Duration
-	HTTP_WRITE_TIMEOUT       time.Duration
-	HTTP_IDLE_TIMEOUT        time.Duration
-	SHUTDOWN_TIMEOUT         time.Duration
-	LOG_LEVEL                slog.Level
+	HTTPAddr          string
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
+	LogLevel          slog.Level
 }
 
 type envReader struct {
-	errs []error
+	errs   []error
+	failed map[string]bool
 }
 
 func (r *envReader) fail(key string, err error) {
 	r.errs = append(r.errs, fmt.Errorf("%s: %w", key, err))
+	if r.failed == nil {
+		r.failed = make(map[string]bool)
+	}
+	r.failed[key] = true
+}
+
+// ok reports whether all given keys were read without errors.
+func (r *envReader) ok(keys ...string) bool {
+	for _, k := range keys {
+		if r.failed[k] {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *envReader) string(key, defaultValue string) string {
@@ -55,28 +70,30 @@ func (r *envReader) duration(key string, defaultValue time.Duration) time.Durati
 func Load() (Config, error) {
 	r := &envReader{}
 	cfg := Config{
-		HTTP_ADDR:                r.string("HTTP_ADDR", ":8080"),
-		HTTP_READ_HEADER_TIMEOUT: r.duration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
-		HTTP_READ_TIMEOUT:        r.duration("HTTP_READ_TIMEOUT", 10*time.Second),
-		HTTP_WRITE_TIMEOUT:       r.duration("HTTP_WRITE_TIMEOUT", 10*time.Second),
-		HTTP_IDLE_TIMEOUT:        r.duration("HTTP_IDLE_TIMEOUT", 120*time.Second),
-		SHUTDOWN_TIMEOUT:         r.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
+		HTTPAddr:          r.string("HTTP_ADDR", ":8080"),
+		ReadHeaderTimeout: r.duration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+		ReadTimeout:       r.duration("HTTP_READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:      r.duration("HTTP_WRITE_TIMEOUT", 10*time.Second),
+		IdleTimeout:       r.duration("HTTP_IDLE_TIMEOUT", 120*time.Second),
+		ShutdownTimeout:   r.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
 	}
 
-	if err := cfg.LOG_LEVEL.UnmarshalText([]byte(r.string("LOG_LEVEL", "info"))); err != nil {
+	if err := cfg.LogLevel.UnmarshalText([]byte(r.string("LOG_LEVEL", "info"))); err != nil {
 		r.fail("LOG_LEVEL", errors.New("must be one of: debug, info, warn, error"))
 	}
 
-	if _, portStr, err := net.SplitHostPort(cfg.HTTP_ADDR); err != nil {
+	if _, portStr, err := net.SplitHostPort(cfg.HTTPAddr); err != nil {
 		r.fail("HTTP_ADDR", err)
 	} else if port, err := strconv.Atoi(portStr); err != nil || port < 0 || port > 65535 {
 		r.fail("HTTP_ADDR", fmt.Errorf("port must be in 0-65535, got %q", portStr))
 	}
 
-	if cfg.HTTP_READ_HEADER_TIMEOUT > cfg.HTTP_READ_TIMEOUT {
+	// Skip the cross-field check when either value fell back to its default;
+	// comparing against a value the user never set would be misleading.
+	if r.ok("HTTP_READ_HEADER_TIMEOUT", "HTTP_READ_TIMEOUT") && cfg.ReadHeaderTimeout > cfg.ReadTimeout {
 		r.fail("HTTP_READ_TIMEOUT", fmt.Errorf(
 			"must be >= HTTP_READ_HEADER_TIMEOUT (%s), got %s",
-			cfg.HTTP_READ_HEADER_TIMEOUT, cfg.HTTP_READ_TIMEOUT,
+			cfg.ReadHeaderTimeout, cfg.ReadTimeout,
 		))
 	}
 

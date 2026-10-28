@@ -23,20 +23,22 @@ func healthzHandler(version string) http.HandlerFunc {
 	}
 }
 
-func routes(version string) *http.ServeMux {
+// Routes returns the API's HTTP handler.
+func Routes(version string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthzHandler(version))
 	return mux
 }
 
-func Server(version string, cfg config.Config) *http.Server {
+// New returns an HTTP server for handler configured from cfg. The caller
+// supplies the listener, so cfg.HTTPAddr is not used here.
+func New(cfg config.Config, handler http.Handler) *http.Server {
 	return &http.Server{
-		Handler:           routes(version),
-		Addr:              cfg.HTTP_ADDR,
-		ReadHeaderTimeout: cfg.HTTP_READ_HEADER_TIMEOUT,
-		ReadTimeout:       cfg.HTTP_READ_TIMEOUT,
-		WriteTimeout:      cfg.HTTP_WRITE_TIMEOUT,
-		IdleTimeout:       cfg.HTTP_IDLE_TIMEOUT,
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 		MaxHeaderBytes:    1 << 20,
 	}
 }
