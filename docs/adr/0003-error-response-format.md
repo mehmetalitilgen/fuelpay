@@ -78,7 +78,7 @@ Pratik sonucu şu: yanlış tipteki alanda `issue` sabit `invalid_type` kodudur,
 RFC 9110 422'yi "iyi biçimlendirilmiş ama semantik olarak işlenemeyen istek" diye tanımlar ve bu tanım alan doğrulamasına teknik olarak uyar. Buna rağmen 400'de kalmamızın sebepleri:
 
 - **İstemci için davranış farkı yok.** Hem `invalid_json` hem `validation_failed` aynı şeyi söyler: gövdeyi düzelt, tekrar dene. İki ayrı status kodu, aynı eylemi gerektiren iki dal üretir. Ayrımı zaten `code` yapıyor.
-- **Tek bir 4xx sınıfı operasyonu basitleştirir.** Dashboard, alarm kuralı ve LB/WAF konfigürasyonları 400'ü istisnasız tanır. 422 ara katmanlarda (proxy, API gateway, istemci HTTP kütüphaneleri) düzensiz ele alınır; bazıları onu retry edilebilir sayar.
+- **Tek bir 4xx sınıfı operasyonu basitleştirir.** Dashboard, alarm kuralı ve LB/WAF konfigürasyonları 400'ü istisnasız tanır. 422 ise ekip içinde ve ara katmanlarda ayrıca tanımlanması gereken bir istisna olur.
 - **422'nin geçmişi WebDAV'dır.** RFC 9110'a taşınmış olsa da yaygın istemci kütüphanelerinde 400 kadar oturmuş değil.
 
 Bu kararı şu durumda gözden geçiririz: istemcinin şema hatası ile iş kuralı hatasını status koduna bakarak ayırması gereken somut bir ihtiyaç çıkarsa. Bugün böyle bir ihtiyaç yok ve `code` bu ayrımı daha ucuza veriyor.

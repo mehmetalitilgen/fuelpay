@@ -14,8 +14,7 @@ type healthResponse struct {
 
 func healthzHandler(version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		httpjson.WriteJSON(w, 200, healthResponse{Status: "ok", Version: version})
+		httpjson.WriteJSON(w, http.StatusOK, healthResponse{Status: "ok", Version: version})
 	}
 }
 

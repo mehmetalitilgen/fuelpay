@@ -14,8 +14,6 @@ import (
 const testVersion = "v9.9.9-test"
 
 // errorEnvelope mirrors the JSON error body httpjson writes, which is
-// unexported there.
-// errorEnvelope mirrors the JSON error body httpjson writes, which is
 // unexported there. Details is decoded as a raw value so the test can tell an
 // absent key from an empty list.
 type errorEnvelope struct {

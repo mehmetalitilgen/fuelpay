@@ -53,7 +53,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var apiErr *Error
 	if !errors.As(err, &apiErr) {
-		slog.ErrorContext(r.Context(), "unhandled error", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "unhandled error", "err", err)
 		apiErr = &Error{
 			Status:  http.StatusInternalServerError,
 			Code:    "internal_error",
