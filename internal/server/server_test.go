@@ -13,6 +13,17 @@ import (
 // fails if the handler ignores the injected version.
 const testVersion = "v9.9.9-test"
 
+// errorEnvelope mirrors the JSON error body httpjson writes, which is
+// unexported there. Details is decoded as a raw value so the test can tell an
+// absent key from an empty list.
+type errorEnvelope struct {
+	Error struct {
+		Code    string          `json:"code"`
+		Message string          `json:"message"`
+		Details json.RawMessage `json:"details"`
+	} `json:"error"`
+}
+
 func TestRoutes(t *testing.T) {
 	srv := httptest.NewServer(Routes(testVersion))
 	defer srv.Close()
@@ -23,6 +34,7 @@ func TestRoutes(t *testing.T) {
 		path           string
 		expectedStatus int
 		expectedAllow  string
+		expectedCode   string // error envelope "code"; empty means no error expected
 		expectJSON     bool
 		expectEmpty    bool
 	}{
@@ -46,6 +58,7 @@ func TestRoutes(t *testing.T) {
 			path:           "/healthz",
 			expectedStatus: http.StatusMethodNotAllowed,
 			expectedAllow:  "GET, HEAD",
+			expectedCode:   "method_not_allowed",
 		},
 		{
 			name:           "PUT healthz",
@@ -53,6 +66,7 @@ func TestRoutes(t *testing.T) {
 			path:           "/healthz",
 			expectedStatus: http.StatusMethodNotAllowed,
 			expectedAllow:  "GET, HEAD",
+			expectedCode:   "method_not_allowed",
 		},
 		{
 			name:           "PATCH healthz",
@@ -60,6 +74,7 @@ func TestRoutes(t *testing.T) {
 			path:           "/healthz",
 			expectedStatus: http.StatusMethodNotAllowed,
 			expectedAllow:  "GET, HEAD",
+			expectedCode:   "method_not_allowed",
 		},
 		{
 			name:           "DELETE healthz",
@@ -67,18 +82,21 @@ func TestRoutes(t *testing.T) {
 			path:           "/healthz",
 			expectedStatus: http.StatusMethodNotAllowed,
 			expectedAllow:  "GET, HEAD",
+			expectedCode:   "method_not_allowed",
 		},
 		{
 			name:           "unknown path",
 			method:         http.MethodGet,
 			path:           "/does-not-exist",
 			expectedStatus: http.StatusNotFound,
+			expectedCode:   "not_found",
 		},
 		{
 			name:           "root path",
 			method:         http.MethodGet,
 			path:           "/",
 			expectedStatus: http.StatusNotFound,
+			expectedCode:   "not_found",
 		},
 	}
 
@@ -107,6 +125,40 @@ func TestRoutes(t *testing.T) {
 			if tt.expectedAllow != "" {
 				if got := res.Header.Get("Allow"); got != tt.expectedAllow {
 					t.Errorf("unexpected Allow header: want %q, got %q", tt.expectedAllow, got)
+				}
+			}
+
+			// Routing errors use the same envelope as handler errors, so a
+			// client can parse every failure the same way.
+			if tt.expectedCode != "" {
+				if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+					t.Errorf("unexpected Content-Type: want application/json, got %q", ct)
+				}
+
+				var got errorEnvelope
+				if err := json.Unmarshal(body, &got); err != nil {
+					t.Fatalf("body is not valid JSON: %v (body: %q)", err, body)
+				}
+				if got.Error.Code != tt.expectedCode {
+					t.Errorf("unexpected error code: want %q, got %q", tt.expectedCode, got.Error.Code)
+				}
+				if got.Error.Message == "" {
+					t.Errorf("expected a non-empty message, got body %q", body)
+				}
+
+				// Routing errors carry no field details, so the key must be
+				// absent rather than null or an empty list.
+				if got.Error.Details != nil {
+					t.Errorf("expected %q to be omitted, got body %s", "details", body)
+				}
+
+				// The payload must be nested under "error" and nothing else.
+				var top map[string]json.RawMessage
+				if err := json.Unmarshal(body, &top); err != nil {
+					t.Fatalf("body is not a JSON object: %v (body: %q)", err, body)
+				}
+				if _, ok := top["error"]; !ok || len(top) != 1 {
+					t.Errorf("expected %q to be the only top-level key, got body %s", "error", body)
 				}
 			}
 

@@ -103,6 +103,77 @@ Notlar:
   `terminationGracePeriodSeconds` varsayılan olarak 30 saniyedir; `docker stop` ise 10 saniye bekler.
   `docker stop` ile varsayılan `15s` değeri dolmadan süreç öldürülebilir; gerekirse `docker stop -t 20` kullanın.
 
+## Hata formatı
+
+Tüm hata yanıtları tek bir `error` anahtarının altında, aynı gövdeyle döner. Başarılı
+yanıtlar zarfa sarılmaz. Kararın gerekçesi için [ADR 0003](docs/adr/0003-error-response-format.md).
+
+```json
+{
+  "error": {
+    "code": "invalid_json",
+    "message": "Request body contains an unknown field.",
+    "details": [
+      { "field": "colour", "issue": "unknown_field" }
+    ]
+  }
+}
+```
+
+- `code` — zorunlu. Sabit makine kodu; istemci buna göre dallanmalıdır.
+- `message` — zorunlu. İnsan için açıklama. Herhangi bir sürümde değişebilir,
+  **parse edilmemelidir.**
+- `details` — opsiyonel. Alan bazlı hata yoksa anahtar hiç yazılmaz; `null` veya `[]` dönmez.
+
+### Kodlar
+
+| Kod | Status | Ne zaman |
+|---|---|---|
+| `invalid_json` | 400 | Gövde boş, bozuk, obje değil, birden fazla değer içeriyor, bilinmeyen alan var veya bir alanın tipi yanlış |
+| `validation_failed` | 400 | Gövde geçerli JSON ama bir veya birden fazla alan iş kurallarına uymuyor |
+| `payload_too_large` | 413 | Gövde 1 MiB sınırını aşıyor |
+| `unsupported_media_type` | 415 | `Content-Type` `application/json` değil |
+| `not_found` | 404 | Yol eşleşmedi veya kaynak yok |
+| `method_not_allowed` | 405 | Yol var ama method desteklenmiyor; yanıt `Allow` header'ı taşır |
+| `internal_error` | 500 | Beklenmeyen hata. Gövde sabittir, sebep yalnızca log'a yazılır |
+
+### `details[].issue` değerleri
+
+Bunlar da sabit kodlardır, boşluk içermez.
+
+| Issue | Ne zaman |
+|---|---|
+| `invalid_type` | Alanın JSON tipi beklenenden farklı. Beklenen tip `message`'da yazar |
+| `unknown_field` | Gövdede şemada olmayan alan var |
+
+### Örnekler
+
+Bilinmeyen yol:
+
+```sh
+curl.exe -i http://localhost:8080/does-not-exist
+```
+
+```json
+{"error":{"code":"not_found","message":"The requested resource was not found."}}
+```
+
+Desteklenmeyen method (yanıt `Allow: GET, HEAD` header'ı ile gelir):
+
+```sh
+curl.exe -i -X POST http://localhost:8080/healthz
+```
+
+```json
+{"error":{"code":"method_not_allowed","message":"The request method is not allowed for this resource."}}
+```
+
+Yanlış tipte alan:
+
+```json
+{"error":{"code":"invalid_json","message":"Request body field \"count\" must be of type int.","details":[{"field":"count","issue":"invalid_type"}]}}
+```
+
 ## Test
 
 Birim testleri ve statik analiz:
