@@ -1,10 +1,13 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/mehmetalitilgen/fuelpay/internal/config"
 	"github.com/mehmetalitilgen/fuelpay/internal/httpjson"
+	"github.com/mehmetalitilgen/fuelpay/internal/middleware"
+	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
 )
 
 type healthResponse struct {
@@ -18,11 +21,22 @@ func healthzHandler(version string) http.HandlerFunc {
 	}
 }
 
-// Routes returns the API's HTTP handler.
-func Routes(version string) http.Handler {
+// Routes returns the API's HTTP handler, wrapped in the middleware chain.
+func Routes(version string, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthzHandler(version))
-	return withJSONErrors(mux)
+	return withMiddleware(withJSONErrors(mux), logger)
+}
+
+// withMiddleware applies the request-wide middleware in a fixed order. The
+// request ID is outermost so every other layer can read it; AccessLog wraps
+// Recover so a recovered panic is still logged with its 500 status.
+func withMiddleware(h http.Handler, logger *slog.Logger) http.Handler {
+	return middleware.Chain(h,
+		requestid.Middleware,
+		middleware.AccessLog(logger),
+		middleware.Recover(logger),
+	)
 }
 
 // statusRecorder is an http.ResponseWriter that records the status code and

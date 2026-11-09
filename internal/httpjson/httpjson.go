@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
 )
 
 type FieldError struct {
@@ -31,10 +33,11 @@ type errorBody struct {
 }
 
 // errorEnvelope wraps every error response. The "error" key lets a client tell
-// a failure from a success without looking at the status code, and leaves the
-// top level free for sibling keys such as request_id.
+// a failure from a success without looking at the status code; request_id
+// sits next to it so support can match a response to its log lines.
 type errorEnvelope struct {
-	Error errorBody `json:"error"`
+	Error     errorBody `json:"error"`
+	RequestID string    `json:"request_id,omitempty"`
 }
 
 func (e *Error) Error() string {
@@ -52,8 +55,9 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var apiErr *Error
+	requestID := requestid.FromContext(r.Context())
 	if !errors.As(err, &apiErr) {
-		slog.ErrorContext(r.Context(), "unhandled error", "err", err)
+		slog.ErrorContext(r.Context(), "unhandled error", "err", err, "request_id", requestID)
 		apiErr = &Error{
 			Status:  http.StatusInternalServerError,
 			Code:    "internal_error",
@@ -66,11 +70,14 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusInternalServerError
 	}
 
-	WriteJSON(w, status, errorEnvelope{Error: errorBody{
-		Code:    apiErr.Code,
-		Message: apiErr.Message,
-		Details: apiErr.Details,
-	}})
+	WriteJSON(w, status, errorEnvelope{
+		Error: errorBody{
+			Code:    apiErr.Code,
+			Message: apiErr.Message,
+			Details: apiErr.Details,
+		},
+		RequestID: requestID,
+	})
 }
 
 // unknownFieldPrefix is the text encoding/json uses when DisallowUnknownFields

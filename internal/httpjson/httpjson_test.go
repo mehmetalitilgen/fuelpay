@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
 )
 
 // decodeTarget is the struct the DecodeJSON tests decode into.
@@ -283,6 +285,23 @@ func TestWriteErrorEnvelopeShape(t *testing.T) {
 		})
 
 		want := `{"error":{"code":"invalid_json","message":"Request body contains an unknown field.","details":[{"field":"colour","issue":"unknown_field"}]}}`
+		if got := strings.TrimSpace(rec.Body.String()); got != want {
+			t.Errorf("unexpected body:\nwant %s\ngot  %s", want, got)
+		}
+	})
+
+	t.Run("with request id", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req = req.WithContext(requestid.NewContext(req.Context(), "req-1"))
+
+		WriteError(rec, req, &Error{
+			Status:  http.StatusNotFound,
+			Code:    "not_found",
+			Message: "The requested resource was not found.",
+		})
+
+		want := `{"error":{"code":"not_found","message":"The requested resource was not found."},"request_id":"req-1"}`
 		if got := strings.TrimSpace(rec.Body.String()); got != want {
 			t.Errorf("unexpected body:\nwant %s\ngot  %s", want, got)
 		}

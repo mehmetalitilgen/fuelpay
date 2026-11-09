@@ -174,6 +174,33 @@ Yanlış tipte alan:
 {"error":{"code":"invalid_json","message":"Request body field \"count\" must be of type int.","details":[{"field":"count","issue":"invalid_type"}]}}
 ```
 
+Hata gövdeleri ayrıca üst seviyede `request_id` alanını taşır (bkz. sonraki bölüm).
+
+## Request ID ve access log
+
+Her yanıt bir `X-Request-ID` header'ı taşır. İstek geçerli bir `X-Request-ID`
+gönderirse (1–128 karakter, sadece `A-Z a-z 0-9 . _ -`) aynı değer kullanılır;
+yoksa veya geçersizse 32 karakterlik rastgele hex bir ID üretilir. Aynı değer hata
+gövdesinde de döner:
+
+```json
+{"error":{"code":"not_found","message":"The requested resource was not found."},"request_id":"test-1"}
+```
+
+Her istek tamamlandığında tek bir access log satırı yazılır:
+
+```json
+{"time":"...","level":"INFO","msg":"http request","request_id":"test-1","method":"GET","path":"/nope","status":404,"bytes":102,"duration_ms":0.21,"remote_addr":"127.0.0.1"}
+```
+
+- Query string, header'lar ve gövdeler log'lanmaz.
+- `/healthz` satırları `DEBUG` seviyesindedir; `LOG_LEVEL=debug` ile görünür.
+- 5xx yanıtlar `ERROR` seviyesinde log'lanır.
+- Handler'daki bir panic istemciye `500 internal_error` olarak döner; panic değeri ve
+  stack trace sadece `panic recovered` log satırına yazılır.
+
+Kararların gerekçesi: [ADR 0004](docs/adr/0004-middleware-and-request-id.md).
+
 ## Test
 
 Birim testleri ve statik analiz:
