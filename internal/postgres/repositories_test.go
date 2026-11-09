@@ -14,7 +14,7 @@ import (
 	"github.com/mehmetalitilgen/fuelpay/internal/terminal"
 )
 
-// cleanPool returns a migrated, empty database.
+// cleanPool returns a migrated, empty database of its own.
 func cleanPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	pool := testPool(t)

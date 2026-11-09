@@ -86,13 +86,20 @@ API, `DATABASE_URL` tanımlıysa PostgreSQL'i kullanır (şema önceden migrate 
 tanımlı değilse in-memory depolamayla açılır ve bir `WARN` log'u yazar — veri restart'ta
 kaybolur. Kararlar: [ADR 0005](docs/adr/0005-postgres-persistence.md).
 
-Veritabanı testleri `TEST_DATABASE_URL` tanımlıysa çalışır, değilse atlanır. Bu veritabanı
-testler tarafından silinip yeniden kurulur; geliştirme veritabanını vermeyin:
+Veritabanı testleri her test için **kendi boş veritabanını** oluşturur ve test bitince siler
+(`internal/postgres/pgtest`). Sunucu şöyle seçilir:
+
+1. `TEST_DATABASE_URL` tanımlıysa o sunucu (kullanıcı `CREATE DATABASE` yetkisine sahip olmalı).
+2. Değilse Docker çalışıyorsa [testcontainers-go](https://golang.testcontainers.org/) ile
+   `postgres:18-alpine` container'ı (test binary'si başına bir kez) başlatılır.
+3. İkisi de yoksa veritabanı testleri atlanır (skip).
 
 ```sh
-docker compose exec postgres createdb -U fuelpay fuelpay_test
-TEST_DATABASE_URL="postgres://fuelpay:fuelpay@localhost:5433/fuelpay_test?sslmode=disable" go test ./...
+go test ./...                       # Docker açıksa container ile
+TEST_DATABASE_URL="postgres://fuelpay:fuelpay@localhost:5433/postgres?sslmode=disable" go test ./...
 ```
+
+CI'da testler testcontainers ile koşar.
 
 ## Çalıştırma
 

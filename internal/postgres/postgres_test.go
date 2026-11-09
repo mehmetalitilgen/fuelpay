@@ -2,21 +2,17 @@ package postgres
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mehmetalitilgen/fuelpay/internal/postgres/pgtest"
 )
 
-// testPool connects to TEST_DATABASE_URL or skips the test. The database
-// must be disposable: tests drop and recreate the schema.
+// testPool returns a pool for a fresh, empty database of its own (see pgtest).
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	pool, err := Open(context.Background(), url)
+	pool, err := Open(context.Background(), pgtest.URL(t))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
