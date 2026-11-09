@@ -1,3 +1,5 @@
+// Package config loads and validates the service configuration from
+// environment variables.
 package config
 
 import (
@@ -10,6 +12,7 @@ import (
 	"time"
 )
 
+// Config is the validated service configuration.
 type Config struct {
 	HTTPAddr          string
 	ReadHeaderTimeout time.Duration
@@ -67,6 +70,8 @@ func (r *envReader) duration(key string, defaultValue time.Duration) time.Durati
 	return n
 }
 
+// Load reads the configuration from the environment, applying defaults for
+// unset or empty variables. It reports every invalid variable at once.
 func Load() (Config, error) {
 	r := &envReader{}
 	cfg := Config{

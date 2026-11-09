@@ -231,6 +231,19 @@ CGO_ENABLED=1 go test -race -count=10 ./...
 $env:CGO_ENABLED = "1"; go test -race -count=10 ./...
 ```
 
+Lint ([golangci-lint](https://golangci-lint.run/) v2, ayarlar `.golangci.yml`'de):
+
+```sh
+golangci-lint run ./...
+golangci-lint fmt ./...   # gofmt + goimports ile düzeltir
+```
+
+### CI
+
+Her PR ve `main`'e her push'ta GitHub Actions (`.github/workflows/ci.yml`) üç iş çalıştırır:
+`lint` (golangci-lint), `test` (`go mod tidy` kontrolü + `go test -race` + coverage) ve
+`build` (statik binary, sürüm = commit SHA). Branch'ler PR üzerinden ve CI yeşilken merge edilmelidir.
+
 Çalışan servisi elle kontrol etmek için (PowerShell'de `curl` bir alias'tır, `curl.exe` kullanın):
 
 ```sh

@@ -1,0 +1,43 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  # The standard set (errcheck, govet, ineffassign, staticcheck, unused) plus
+  # linters that catch real bugs in HTTP and error-handling code.
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - nolintlint
+    - revive
+    - unconvert
+  settings:
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: unused-parameter
+          disabled: true
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Tests may ignore Close and similar errors on throwaway resources.
+      - path: _test\.go
+        linters: [errcheck, gosec, bodyclose]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/mehmetalitilgen/fuelpay

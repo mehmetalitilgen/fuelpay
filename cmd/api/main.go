@@ -1,3 +1,4 @@
+// Command api runs the FuelPay TSM HTTP API.
 package main
 
 import (

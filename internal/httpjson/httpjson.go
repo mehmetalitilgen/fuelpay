@@ -1,3 +1,5 @@
+// Package httpjson writes JSON responses, renders the API error envelope and
+// decodes JSON request bodies strictly.
 package httpjson
 
 import (
@@ -14,11 +16,14 @@ import (
 	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
 )
 
+// FieldError describes a problem with one request field.
 type FieldError struct {
 	Field string `json:"field"`
 	Issue string `json:"issue"`
 }
 
+// Error is an error that is returned to the client as-is. Any other error
+// written with WriteError becomes a 500 internal_error.
 type Error struct {
 	Status  int
 	Code    string
@@ -44,6 +49,7 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
+// WriteJSON writes v as JSON with the given status.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -53,6 +59,8 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
+// WriteError writes err in the error envelope. An *Error (possibly wrapped)
+// is written as-is; anything else is logged and answered with 500.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var apiErr *Error
 	requestID := requestid.FromContext(r.Context())
@@ -100,6 +108,9 @@ func unknownField(err error) (field string, ok bool) {
 	return strings.Trim(strings.TrimPrefix(msg, unknownFieldPrefix), `"`), true
 }
 
+// DecodeJSON decodes a single JSON object from the request body into dst. It
+// requires a JSON Content-Type, limits the body to 1 MiB and rejects unknown
+// fields. Client mistakes are returned as *Error.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mt != "application/json" {
@@ -205,12 +216,16 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return nil
 }
 
+// FieldErrors collects validation problems in the order they are found.
 type FieldErrors []FieldError
 
+// Add records a problem with field.
 func (fe *FieldErrors) Add(field, issue string) {
 	*fe = append(*fe, FieldError{Field: field, Issue: issue})
 }
 
+// Err returns nil when nothing was recorded, otherwise a 400
+// validation_failed *Error carrying the details.
 func (fe FieldErrors) Err() error {
 	if len(fe) == 0 {
 		return nil
