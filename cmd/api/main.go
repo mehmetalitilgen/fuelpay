@@ -14,8 +14,6 @@ import (
 
 	"github.com/mehmetalitilgen/fuelpay/internal/config"
 	"github.com/mehmetalitilgen/fuelpay/internal/server"
-	"github.com/mehmetalitilgen/fuelpay/internal/station"
-	"github.com/mehmetalitilgen/fuelpay/internal/terminal"
 )
 
 var version = "dev"
@@ -27,15 +25,7 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
-	stations := station.NewService(station.NewMemoryRepository())
-	terminals := terminal.NewService(terminal.NewMemoryRepository(), stations)
-
-	if err := run(signalContext(), logger, level, server.Routes(server.Deps{
-		Version:   version,
-		Logger:    logger,
-		Stations:  stations,
-		Terminals: terminals,
-	}), nil); err != nil {
+	if err := run(signalContext(), logger, level, buildAPI, nil); err != nil {
 		logger.Error("application terminated", "err", err)
 		os.Exit(1)
 	}
@@ -56,15 +46,25 @@ func signalContext() context.Context {
 	return ctx
 }
 
-// run serves handler until ctx is canceled, then shuts the server down
-// gracefully. onListen, if not nil, is called with the bound address once
-// the server accepts connections.
-func run(ctx context.Context, logger *slog.Logger, level *slog.LevelVar, handler http.Handler, onListen func(net.Addr)) error {
+// buildFunc creates the HTTP handler once the configuration is known, e.g.
+// by connecting to the database. cleanup runs after the server has stopped.
+type buildFunc func(ctx context.Context, cfg config.Config, logger *slog.Logger) (h http.Handler, cleanup func(), err error)
+
+// run builds the handler, serves it until ctx is canceled, then shuts the
+// server down gracefully and releases what build acquired. onListen, if not
+// nil, is called with the bound address once the server accepts connections.
+func run(ctx context.Context, logger *slog.Logger, level *slog.LevelVar, build buildFunc, onListen func(net.Addr)) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 	level.Set(cfg.LogLevel)
+
+	handler, cleanup, err := build(ctx, cfg, logger)
+	if err != nil {
+		return fmt.Errorf("build api: %w", err)
+	}
+	defer cleanup()
 
 	srv := server.New(cfg, handler)
 

@@ -16,6 +16,7 @@ var envKeys = []string{
 	"HTTP_IDLE_TIMEOUT",
 	"SHUTDOWN_TIMEOUT",
 	"LOG_LEVEL",
+	"DATABASE_URL",
 }
 
 // setEnv clears every config variable so values from the developer's shell
@@ -63,6 +64,7 @@ func TestLoad(t *testing.T) {
 				"HTTP_IDLE_TIMEOUT":        "1m",
 				"SHUTDOWN_TIMEOUT":         "500ms",
 				"LOG_LEVEL":                "debug",
+				"DATABASE_URL":             "postgres://u:p@db:5432/fuelpay",
 			},
 			want: Config{
 				HTTPAddr:          "127.0.0.1:9090",
@@ -72,6 +74,7 @@ func TestLoad(t *testing.T) {
 				IdleTimeout:       time.Minute,
 				ShutdownTimeout:   500 * time.Millisecond,
 				LogLevel:          slog.LevelDebug,
+				DatabaseURL:       "postgres://u:p@db:5432/fuelpay",
 			},
 		},
 		{
