@@ -1,6 +1,6 @@
 # FuelPay
 
-FuelPay API servisi. Şu an tek bir sağlık kontrolü uç noktası (`GET /healthz`) sunar.
+FuelPay TSM API servisi: akaryakıt istasyonları, POS terminalleri ve ödemeler için backend.
 
 Endpoint referansı: [docs/api.md](docs/api.md).
 
