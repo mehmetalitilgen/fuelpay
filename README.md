@@ -135,6 +135,7 @@ yanıtlar zarfa sarılmaz. Kararın gerekçesi için [ADR 0003](docs/adr/0003-er
 | `unsupported_media_type` | 415 | `Content-Type` `application/json` değil |
 | `not_found` | 404 | Yol eşleşmedi veya kaynak yok |
 | `method_not_allowed` | 405 | Yol var ama method desteklenmiyor; yanıt `Allow` header'ı taşır |
+| `conflict` | 409 | Benzersiz olması gereken bir değer zaten kullanımda veya kaynak istenen işleme uygun durumda değil; `details` hangi alan olduğunu söyler |
 | `internal_error` | 500 | Beklenmeyen hata. Gövde sabittir, sebep yalnızca log'a yazılır |
 
 ### `details[].issue` değerleri
@@ -145,6 +146,10 @@ Bunlar da sabit kodlardır, boşluk içermez.
 |---|---|
 | `invalid_type` | Alanın JSON tipi beklenenden farklı. Beklenen tip `message`'da yazar |
 | `unknown_field` | Gövdede şemada olmayan alan var |
+| `required` | Zorunlu alan eksik veya sadece boşluk |
+| `too_short` / `too_long` | Uzunluk sınırı dışında |
+| `invalid_format` | Değer beklenen biçimde değil, örn. küçük harfli istasyon kodu |
+| `already_exists` | `conflict` ile birlikte: değer başka bir kayıtta kullanılıyor |
 
 ### Örnekler
 

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
+	"github.com/mehmetalitilgen/fuelpay/internal/station"
 )
 
 var discard = slog.New(slog.DiscardHandler)
@@ -34,7 +35,7 @@ type errorEnvelope struct {
 }
 
 func TestRoutes(t *testing.T) {
-	srv := httptest.NewServer(Routes(testVersion, discard))
+	srv := httptest.NewServer(Routes(testDeps()))
 	defer srv.Close()
 
 	tests := []struct {
@@ -201,7 +202,7 @@ func TestRoutes(t *testing.T) {
 var generatedID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 func TestRoutesRequestID(t *testing.T) {
-	srv := httptest.NewServer(Routes(testVersion, discard))
+	srv := httptest.NewServer(Routes(testDeps()))
 	defer srv.Close()
 
 	t.Run("INT1 generated on healthz", func(t *testing.T) {
@@ -289,5 +290,13 @@ func TestMiddlewarePanicRecovery(t *testing.T) { // INT3
 	out := logs.String()
 	if !strings.Contains(out, `"msg":"panic recovered"`) || !strings.Contains(out, `"path":"/panic","status":500`) {
 		t.Errorf("want panic and access log lines for the 500, got:\n%s", out)
+	}
+}
+
+func testDeps() Deps {
+	return Deps{
+		Version:  testVersion,
+		Logger:   discard,
+		Stations: station.NewService(station.NewMemoryRepository()),
 	}
 }
