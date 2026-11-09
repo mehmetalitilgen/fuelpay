@@ -36,3 +36,38 @@ Content-Type: application/json
 ### `GET /v1/stations/{id}`
 
 `200 OK` ile istasyonu döner, yoksa `404 not_found`.
+
+## Terminals
+
+Terminal yaşam döngüsü: `pending → active ⇄ suspended → decommissioned`. Yeni kayıtlar `pending` başlar.
+
+### `POST /v1/stations/{id}/terminals`
+
+İstasyona terminal kaydeder.
+
+| Alan | Tip | Kural |
+|---|---|---|
+| `serial_number` | string | Zorunlu. 6–32 karakter, `A-Z 0-9 -`. **Tüm istasyonlar arasında** benzersiz |
+| `model` | string | Zorunlu. En fazla 64 karakter |
+
+`201 Created`, `Location: /v1/terminals/{id}`:
+
+```json
+{"id":"019a6b...","station_id":"019a6a...","serial_number":"PAX-A920-0001","model":"PAX A920","status":"pending","created_at":"...","updated_at":"..."}
+```
+
+`activated_at` sadece terminal en az bir kez aktive edildiyse yer alır.
+
+| Status | `code` | Ne zaman |
+|---|---|---|
+| 400 | `validation_failed` | Alan kuralı ihlali |
+| 404 | `not_found` | İstasyon yok |
+| 409 | `conflict` | Seri numarası kayıtlı (`details`: `serial_number:already_exists`) |
+
+### `GET /v1/terminals/{id}`
+
+`200 OK` veya `404 not_found`.
+
+### `GET /v1/stations/{id}/terminals`
+
+İstasyonun terminalleri, eskiden yeniye: `{"items":[...]}`. Terminal yoksa `{"items":[]}`; istasyon yoksa `404`.
