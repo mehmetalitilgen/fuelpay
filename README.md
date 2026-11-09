@@ -2,6 +2,8 @@
 
 FuelPay API servisi. Şu an tek bir sağlık kontrolü uç noktası (`GET /healthz`) sunar.
 
+Endpoint referansı: [docs/api.md](docs/api.md).
+
 ## Gereksinimler
 
 - Go 1.25.5 veya üzeri (`go.mod` ile aynı sürüm)
