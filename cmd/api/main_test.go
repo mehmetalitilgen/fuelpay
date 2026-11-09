@@ -7,10 +7,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mehmetalitilgen/fuelpay/internal/config"
 )
 
 const listeningMsg = "http server listening"
@@ -23,6 +26,7 @@ var envKeys = []string{
 	"HTTP_IDLE_TIMEOUT",
 	"SHUTDOWN_TIMEOUT",
 	"LOG_LEVEL",
+	"DATABASE_URL",
 }
 
 // setEnv clears every config variable so values from the developer's shell
@@ -130,7 +134,7 @@ func startRun(t *testing.T, env map[string]string, handler http.Handler) *testSe
 	addrs := make(chan net.Addr, 1)
 	done := make(chan error, 1)
 	go func() {
-		done <- run(ctx, logger, new(slog.LevelVar), handler, func(a net.Addr) { addrs <- a })
+		done <- run(ctx, logger, new(slog.LevelVar), static(handler), func(a net.Addr) { addrs <- a })
 	}()
 
 	select {
@@ -167,7 +171,7 @@ func TestRunInvalidConfig(t *testing.T) {
 	setEnv(t, map[string]string{"LOG_LEVEL": "loud"})
 	logger, logs := newTestLogger()
 
-	err := run(context.Background(), logger, new(slog.LevelVar), http.NotFoundHandler(), nil)
+	err := run(context.Background(), logger, new(slog.LevelVar), static(http.NotFoundHandler()), nil)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -192,7 +196,7 @@ func TestRunPortInUse(t *testing.T) {
 	setEnv(t, map[string]string{"HTTP_ADDR": ln.Addr().String()})
 	logger, logs := newTestLogger()
 
-	err = run(context.Background(), logger, new(slog.LevelVar), http.NotFoundHandler(), nil)
+	err = run(context.Background(), logger, new(slog.LevelVar), static(http.NotFoundHandler()), nil)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -263,5 +267,86 @@ func TestRunShutdownTimeout(t *testing.T) {
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("want context.DeadlineExceeded, got %v", err)
+	}
+}
+
+// static returns a buildFunc that always serves h.
+func static(h http.Handler) buildFunc {
+	return func(context.Context, config.Config, *slog.Logger) (http.Handler, func(), error) {
+		return h, func() {}, nil
+	}
+}
+
+func TestRunBuildError(t *testing.T) {
+	setEnv(t, map[string]string{"HTTP_ADDR": "127.0.0.1:0"})
+	logger, logs := newTestLogger()
+	failing := func(context.Context, config.Config, *slog.Logger) (http.Handler, func(), error) {
+		return nil, nil, errors.New("database unreachable")
+	}
+
+	err := run(context.Background(), logger, new(slog.LevelVar), failing, nil)
+	if err == nil || !strings.HasPrefix(err.Error(), "build api: ") {
+		t.Fatalf("want a build api error, got %v", err)
+	}
+	for _, line := range drainLogs(logs) {
+		if strings.Contains(line, listeningMsg) {
+			t.Error("server must not listen when the handler cannot be built")
+		}
+	}
+}
+
+func TestRunCleanupAfterShutdown(t *testing.T) {
+	setEnv(t, map[string]string{"HTTP_ADDR": "127.0.0.1:0"})
+	logger, _ := newTestLogger()
+	ctx, cancel := context.WithCancel(context.Background())
+	cleaned := make(chan struct{})
+	build := func(context.Context, config.Config, *slog.Logger) (http.Handler, func(), error) {
+		return http.NotFoundHandler(), func() { close(cleaned) }, nil
+	}
+
+	done := make(chan error, 1)
+	listening := make(chan struct{})
+	go func() {
+		done <- run(ctx, logger, new(slog.LevelVar), build, func(net.Addr) { close(listening) })
+	}()
+	<-listening
+	select {
+	case <-cleaned:
+		t.Fatal("cleanup ran while the server was still serving")
+	default:
+	}
+	cancel()
+	if err := waitResult(t, done); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-cleaned:
+	default:
+		t.Error("cleanup did not run after shutdown")
+	}
+}
+
+func TestBuildAPIInMemory(t *testing.T) {
+	logger, logs := newTestLogger()
+	h, cleanup, err := buildAPI(context.Background(), config.Config{}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if !strings.Contains(strings.Join(drainLogs(logs), ""), "in-memory storage") {
+		t.Error("want a warning about in-memory storage")
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("healthz: want 200, got %d", rec.Code)
+	}
+}
+
+func TestBuildAPIBadDatabaseURL(t *testing.T) {
+	logger, _ := newTestLogger()
+	_, _, err := buildAPI(context.Background(), config.Config{DatabaseURL: "postgres://user@127.0.0.1:1/x?connect_timeout=1"}, logger)
+	if err == nil || !strings.Contains(err.Error(), "open database") {
+		t.Errorf("want an open database error, got %v", err)
 	}
 }

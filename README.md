@@ -21,6 +21,7 @@ Tüm ayarlar ortam değişkenlerinden okunur. Boş bırakılan değişken varsay
 | `HTTP_IDLE_TIMEOUT`        | Keep-alive bağlantısının boşta bekleyebileceği süre             | `120s`     |
 | `SHUTDOWN_TIMEOUT`         | Kapanışta devam eden isteklerin bitmesi için beklenecek süre    | `15s`      |
 | `LOG_LEVEL`                | Log seviyesi: `debug`, `info`, `warn`, `error`                  | `info`     |
+| `DATABASE_URL`             | PostgreSQL bağlantı adresi; boşsa in-memory depolama (parola içerir, log'lanmaz) | —          |
 
 Süre değerleri Go'nun `time.ParseDuration` biçimindedir: `500ms`, `10s`, `2m` gibi.
 
@@ -69,6 +70,21 @@ go run ./cmd/migrate up
 Yeni migration: `internal/postgres/migrations/` altına sıradaki numarayla
 (`00002_aciklama.sql`) `-- +goose Up` / `-- +goose Down` bölümlerini içeren bir dosya ekleyin.
 Uygulanmış bir migration dosyası **değiştirilmez**; düzeltme yeni bir migration ile yapılır.
+
+Sorgular `internal/postgres/queries/*.sql` altında elle yazılır; Go kodu
+[sqlc](https://sqlc.dev) ile üretilir (`internal/postgres/db`, commit'lenir). Sorgu veya şema
+değişince:
+
+```sh
+go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0   # bir kez
+sqlc generate
+```
+
+CI, üretilmiş kodun güncel olduğunu `sqlc diff` ile kontrol eder.
+
+API, `DATABASE_URL` tanımlıysa PostgreSQL'i kullanır (şema önceden migrate edilmiş olmalı);
+tanımlı değilse in-memory depolamayla açılır ve bir `WARN` log'u yazar — veri restart'ta
+kaybolur. Kararlar: [ADR 0005](docs/adr/0005-postgres-persistence.md).
 
 Veritabanı testleri `TEST_DATABASE_URL` tanımlıysa çalışır, değilse atlanır. Bu veritabanı
 testler tarafından silinip yeniden kurulur; geliştirme veritabanını vermeyin:

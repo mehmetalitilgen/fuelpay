@@ -21,6 +21,9 @@ type Config struct {
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
 	LogLevel          slog.Level
+	// DatabaseURL is the PostgreSQL connection string. Empty means in-memory
+	// storage. It contains credentials and must never be logged.
+	DatabaseURL string
 }
 
 type envReader struct {
@@ -81,6 +84,7 @@ func Load() (Config, error) {
 		WriteTimeout:      r.duration("HTTP_WRITE_TIMEOUT", 10*time.Second),
 		IdleTimeout:       r.duration("HTTP_IDLE_TIMEOUT", 120*time.Second),
 		ShutdownTimeout:   r.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
+		DatabaseURL:       r.string("DATABASE_URL", ""),
 	}
 
 	if err := cfg.LogLevel.UnmarshalText([]byte(r.string("LOG_LEVEL", "info"))); err != nil {

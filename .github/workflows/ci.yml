@@ -70,3 +70,15 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_SHA::12}" -o bin/fuelpay ./cmd/api
+
+  sqlc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: "1.29.0"
+      - name: Generated code is up to date
+        run: sqlc diff
+      - name: Queries are valid
+        run: sqlc vet
