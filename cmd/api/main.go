@@ -13,6 +13,7 @@ import (
 
 	"github.com/mehmetalitilgen/fuelpay/internal/config"
 	"github.com/mehmetalitilgen/fuelpay/internal/server"
+	"github.com/mehmetalitilgen/fuelpay/internal/station"
 )
 
 var version = "dev"
@@ -24,7 +25,11 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
-	if err := run(signalContext(), logger, level, server.Routes(version, logger), nil); err != nil {
+	if err := run(signalContext(), logger, level, server.Routes(server.Deps{
+		Version:  version,
+		Logger:   logger,
+		Stations: station.NewService(station.NewMemoryRepository()),
+	}), nil); err != nil {
 		logger.Error("application terminated", "err", err)
 		os.Exit(1)
 	}

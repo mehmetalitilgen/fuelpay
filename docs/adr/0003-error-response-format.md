@@ -44,6 +44,7 @@ Dış zarfı tercih etme sebebimiz, üst seviyenin ileride kardeş alanlara aç�
 | `payload_too_large` | 413 | Gövde 1 MiB sınırını aşıyor |
 | `not_found` | 404 | Yol eşleşmedi veya kaynak yok |
 | `method_not_allowed` | 405 | Yol var, method desteklenmiyor (`Allow` header'ı ile birlikte) |
+| `conflict` | 409 | Benzersiz alan çakışması veya kaynağın mevcut durumu işleme izin vermiyor (FTSM-005 ile eklendi) |
 | `internal_error` | 500 | Beklenmeyen hata; sebebi sadece log'a yazılır, gövdeye sızmaz |
 
 `details[].issue` değerleri de sabit kodlardır, boşluk içermez:
@@ -52,6 +53,10 @@ Dış zarfı tercih etme sebebimiz, üst seviyenin ileride kardeş alanlara aç�
 |---|---|
 | `invalid_type` | Alanın JSON tipi beklenenden farklı |
 | `unknown_field` | Gövdede şemada olmayan alan var |
+| `required` | Zorunlu alan eksik veya sadece boşluk (FTSM-005) |
+| `too_short` / `too_long` | Uzunluk sınırı dışında (FTSM-005) |
+| `invalid_format` | Değer beklenen biçimde değil, örn. küçük harfli istasyon kodu (FTSM-005) |
+| `already_exists` | `conflict` ile birlikte: değer başka bir kayıtta kullanılıyor (FTSM-005) |
 
 Gövde parse hatalarının hepsinin tek bir `invalid_json` kodu altında toplanması bilinçli. İstemci açısından bunların hepsi aynı sonucu doğurur: gövdeyi düzelt ve tekrar gönder. Her alt durum için ayrı kod üretmek (`empty_body`, `malformed_json`, `unknown_field`, ...) istemciye davranış farkı sağlamayan bir switch yazdırır, ama kataloğu ve dolayısıyla API sözleşmesini şişirir. Ayrım gereken yerde `details[].issue` ve `message` zaten mevcut.
 

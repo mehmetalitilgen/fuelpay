@@ -8,7 +8,16 @@ import (
 	"github.com/mehmetalitilgen/fuelpay/internal/httpjson"
 	"github.com/mehmetalitilgen/fuelpay/internal/middleware"
 	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
+	"github.com/mehmetalitilgen/fuelpay/internal/station"
 )
+
+// Deps holds everything the HTTP layer needs. Services are constructed in
+// cmd/api so the storage backend can be swapped without touching handlers.
+type Deps struct {
+	Version  string
+	Logger   *slog.Logger
+	Stations *station.Service
+}
 
 type healthResponse struct {
 	Status  string `json:"status"`
@@ -22,10 +31,15 @@ func healthzHandler(version string) http.HandlerFunc {
 }
 
 // Routes returns the API's HTTP handler, wrapped in the middleware chain.
-func Routes(version string, logger *slog.Logger) http.Handler {
+func Routes(d Deps) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", healthzHandler(version))
-	return withMiddleware(withJSONErrors(mux), logger)
+	mux.HandleFunc("GET /healthz", healthzHandler(d.Version))
+
+	stations := stationHandlers{svc: d.Stations}
+	mux.HandleFunc("POST /v1/stations", stations.create)
+	mux.HandleFunc("GET /v1/stations/{id}", stations.get)
+
+	return withMiddleware(withJSONErrors(mux), d.Logger)
 }
 
 // withMiddleware applies the request-wide middleware in a fixed order. The
