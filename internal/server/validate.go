@@ -53,7 +53,7 @@ func code(fe *httpjson.FieldErrors, field, s string, min, max int) string {
 	}
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if !('A' <= c && c <= 'Z' || '0' <= c && c <= '9' || c == '-') {
+		if (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' {
 			fe.Add(field, issueInvalidFormat)
 			break
 		}

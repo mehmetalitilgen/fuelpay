@@ -1,3 +1,4 @@
+// Package middleware provides the HTTP middleware shared by all routes.
 package middleware
 
 import "net/http"

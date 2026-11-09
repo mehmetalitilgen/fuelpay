@@ -1,3 +1,5 @@
+// Package server builds the HTTP API: routes, handlers and the middleware
+// chain around them.
 package server
 
 import (
