@@ -152,6 +152,8 @@ Bunlar da sabit kodlardır, boşluk içermez.
 | `too_short` / `too_long` | Uzunluk sınırı dışında |
 | `invalid_format` | Değer beklenen biçimde değil, örn. küçük harfli istasyon kodu |
 | `already_exists` | `conflict` ile birlikte: değer başka bir kayıtta kullanılıyor |
+| `invalid_transition` | `conflict` ile birlikte: kaynağın mevcut durumu bu işleme izin vermiyor |
+| `concurrent_update` | `conflict` ile birlikte: kaynak eşzamanlı başka bir istekle değişti, tekrar deneyin |
 
 ### Örnekler
 

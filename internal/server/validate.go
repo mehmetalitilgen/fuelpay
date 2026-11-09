@@ -16,6 +16,11 @@ const (
 	issueTooShort      = "too_short"
 	issueInvalidFormat = "invalid_format"
 	issueAlreadyExists = "already_exists"
+
+	// Issues used with 409 conflict when the resource's state forbids the
+	// request rather than a field value.
+	issueInvalidTransition = "invalid_transition"
+	issueConcurrentUpdate  = "concurrent_update"
 )
 
 // text trims s and checks it is present (when required) and at most max

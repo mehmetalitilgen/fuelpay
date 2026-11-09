@@ -71,3 +71,22 @@ Terminal yaşam döngüsü: `pending → active ⇄ suspended → decommissioned
 ### `GET /v1/stations/{id}/terminals`
 
 İstasyonun terminalleri, eskiden yeniye: `{"items":[...]}`. Terminal yoksa `{"items":[]}`; istasyon yoksa `404`.
+
+### Durum geçişleri
+
+| Endpoint | Hedef durum | İzin verilen kaynak durumlar |
+|---|---|---|
+| `POST /v1/terminals/{id}/activate` | `active` | `pending`, `suspended` |
+| `POST /v1/terminals/{id}/suspend` | `suspended` | `active` |
+| `POST /v1/terminals/{id}/decommission` | `decommissioned` | `pending`, `active`, `suspended` |
+
+- Gövde yok. `200 OK` ile güncel terminal döner.
+- Terminal zaten hedef durumdaysa işlem **no-op**'tur: `200` döner, `updated_at` değişmez. Ağ hatası sonrası tekrar gönderilen istek güvenlidir.
+- `activated_at` her aktivasyonda güncellenir (son aktivasyon zamanı); askıya alma veya devreden çıkarma onu silmez.
+- `decommissioned` son durumdur.
+
+| Status | `code` | `details` | Ne zaman |
+|---|---|---|---|
+| 404 | `not_found` | — | Terminal yok |
+| 409 | `conflict` | `status:invalid_transition` | Geçiş yaşam döngüsünde yok (örn. `pending → suspended`) |
+| 409 | `conflict` | `status:concurrent_update` | Durum eşzamanlı başka bir istekle sürekli değişti; tekrar deneyin |
