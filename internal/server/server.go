@@ -9,14 +9,16 @@ import (
 	"github.com/mehmetalitilgen/fuelpay/internal/middleware"
 	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
 	"github.com/mehmetalitilgen/fuelpay/internal/station"
+	"github.com/mehmetalitilgen/fuelpay/internal/terminal"
 )
 
 // Deps holds everything the HTTP layer needs. Services are constructed in
 // cmd/api so the storage backend can be swapped without touching handlers.
 type Deps struct {
-	Version  string
-	Logger   *slog.Logger
-	Stations *station.Service
+	Version   string
+	Logger    *slog.Logger
+	Stations  *station.Service
+	Terminals *terminal.Service
 }
 
 type healthResponse struct {
@@ -38,6 +40,11 @@ func Routes(d Deps) http.Handler {
 	stations := stationHandlers{svc: d.Stations}
 	mux.HandleFunc("POST /v1/stations", stations.create)
 	mux.HandleFunc("GET /v1/stations/{id}", stations.get)
+
+	terminals := terminalHandlers{svc: d.Terminals}
+	mux.HandleFunc("POST /v1/stations/{id}/terminals", terminals.register)
+	mux.HandleFunc("GET /v1/stations/{id}/terminals", terminals.listByStation)
+	mux.HandleFunc("GET /v1/terminals/{id}", terminals.get)
 
 	return withMiddleware(withJSONErrors(mux), d.Logger)
 }

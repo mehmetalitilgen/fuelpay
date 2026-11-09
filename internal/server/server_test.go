@@ -14,6 +14,7 @@ import (
 
 	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
 	"github.com/mehmetalitilgen/fuelpay/internal/station"
+	"github.com/mehmetalitilgen/fuelpay/internal/terminal"
 )
 
 var discard = slog.New(slog.DiscardHandler)
@@ -294,9 +295,11 @@ func TestMiddlewarePanicRecovery(t *testing.T) { // INT3
 }
 
 func testDeps() Deps {
+	stations := station.NewService(station.NewMemoryRepository())
 	return Deps{
-		Version:  testVersion,
-		Logger:   discard,
-		Stations: station.NewService(station.NewMemoryRepository()),
+		Version:   testVersion,
+		Logger:    discard,
+		Stations:  stations,
+		Terminals: terminal.NewService(terminal.NewMemoryRepository(), stations),
 	}
 }
