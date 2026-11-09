@@ -25,3 +25,13 @@ SET status       = sqlc.arg(new_status),
                         ELSE activated_at END
 WHERE id = sqlc.arg(id) AND status = sqlc.arg(old_status)
 RETURNING id, station_id, serial_number, model, status, created_at, updated_at, activated_at;
+
+-- name: CreateTerminalEvent :exec
+INSERT INTO terminal_events (id, terminal_id, type, from_status, to_status, request_id, occurred_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: ListTerminalEvents :many
+SELECT id, terminal_id, type, from_status, to_status, request_id, occurred_at
+FROM terminal_events
+WHERE terminal_id = $1
+ORDER BY occurred_at, id;

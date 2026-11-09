@@ -150,3 +150,40 @@ func TestTerminalLifecycle(t *testing.T) {
 		t.Errorf("GET activate: want 405, got %d", res.Status)
 	}
 }
+
+func TestTerminalEvents(t *testing.T) {
+	srv := httptest.NewServer(Routes(testDeps()))
+	defer srv.Close()
+	stationID := newStation(t, srv, "IST-1")
+	reg := call(t, srv, http.MethodPost, "/v1/stations/"+stationID+"/terminals", `{"serial_number":"S-000001","model":"m"}`)
+	base := "/v1/terminals/" + reg.str("id")
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+base+"/activate", nil)
+	req.Header.Set("X-Request-ID", "ops-ticket-17")
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	evs := call(t, srv, http.MethodGet, base+"/events", "")
+	items, _ := evs.Body["items"].([]any)
+	if evs.Status != http.StatusOK || len(items) != 2 {
+		t.Fatalf("want 2 events, got %d %s", evs.Status, evs.Raw)
+	}
+	first, _ := items[0].(map[string]any)
+	second, _ := items[1].(map[string]any)
+	if first["type"] != "registered" || first["to_status"] != "pending" {
+		t.Errorf("first event: %v", first)
+	}
+	if _, ok := first["from_status"]; ok {
+		t.Errorf("registered event must not have from_status: %v", first)
+	}
+	if second["type"] != "status_changed" || second["from_status"] != "pending" || second["to_status"] != "active" || second["request_id"] != "ops-ticket-17" {
+		t.Errorf("second event: %v", second)
+	}
+
+	if res := call(t, srv, http.MethodGet, "/v1/terminals/missing/events", ""); res.Status != http.StatusNotFound {
+		t.Errorf("events of missing terminal: want 404, got %d", res.Status)
+	}
+}

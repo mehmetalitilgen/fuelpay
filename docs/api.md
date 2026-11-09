@@ -90,3 +90,19 @@ Terminal yaşam döngüsü: `pending → active ⇄ suspended → decommissioned
 | 404 | `not_found` | — | Terminal yok |
 | 409 | `conflict` | `status:invalid_transition` | Geçiş yaşam döngüsünde yok (örn. `pending → suspended`) |
 | 409 | `conflict` | `status:concurrent_update` | Durum eşzamanlı başka bir istekle sürekli değişti; tekrar deneyin |
+
+### `GET /v1/terminals/{id}/events`
+
+Terminalin değişiklik geçmişi (audit trail), eskiden yeniye: `{"items":[...]}`.
+
+```json
+{"items":[
+  {"id":"...","terminal_id":"...","type":"registered","to_status":"pending","request_id":"3f9a...","occurred_at":"..."},
+  {"id":"...","terminal_id":"...","type":"status_changed","from_status":"pending","to_status":"active","request_id":"ops-ticket-17","occurred_at":"..."}
+]}
+```
+
+- Her kayıt ve durum değişikliği, değişiklikle **aynı transaction'da** bir event yazar; biri olmadan diğeri kaydedilmez.
+- `request_id`, değişikliği yapan isteğin `X-Request-ID` değeridir; log'larla eşleştirmek için kullanılır.
+- No-op geçişler (zaten hedef durumdaki terminal) ve reddedilen geçişler event üretmez.
+- Terminal yoksa `404`.

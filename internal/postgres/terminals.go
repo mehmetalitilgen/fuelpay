@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,17 +15,18 @@ import (
 
 // TerminalRepository implements terminal.Repository on PostgreSQL.
 type TerminalRepository struct {
-	q *db.Queries
+	pool *pgxpool.Pool
+	q    *db.Queries
 }
 
 // NewTerminalRepository returns a TerminalRepository using pool.
 func NewTerminalRepository(pool *pgxpool.Pool) *TerminalRepository {
-	return &TerminalRepository{q: db.New(pool)}
+	return &TerminalRepository{pool: pool, q: db.New(pool)}
 }
 
-// Create inserts t. Unique and foreign key violations become
-// terminal.ErrSerialTaken and terminal.ErrStationNotFound.
-func (r *TerminalRepository) Create(ctx context.Context, t terminal.Terminal) error {
+// Create inserts t and its event in one transaction. Unique and foreign key
+// violations become terminal.ErrSerialTaken and terminal.ErrStationNotFound.
+func (r *TerminalRepository) Create(ctx context.Context, t terminal.Terminal, ev terminal.Event) error {
 	id, err := uuid.Parse(t.ID)
 	if err != nil {
 		return err
@@ -34,14 +35,25 @@ func (r *TerminalRepository) Create(ctx context.Context, t terminal.Terminal) er
 	if err != nil {
 		return terminal.ErrStationNotFound
 	}
-	err = r.q.CreateTerminal(ctx, db.CreateTerminalParams{
-		ID:           id,
-		StationID:    stationID,
-		SerialNumber: t.SerialNumber,
-		Model:        t.Model,
-		Status:       string(t.Status),
-		CreatedAt:    t.CreatedAt,
-		UpdatedAt:    t.UpdatedAt,
+	evParams, err := eventParams(ev)
+	if err != nil {
+		return err
+	}
+
+	err = withTx(ctx, r.pool, func(q *db.Queries) error {
+		err := q.CreateTerminal(ctx, db.CreateTerminalParams{
+			ID:           id,
+			StationID:    stationID,
+			SerialNumber: t.SerialNumber,
+			Model:        t.Model,
+			Status:       string(t.Status),
+			CreatedAt:    t.CreatedAt,
+			UpdatedAt:    t.UpdatedAt,
+		})
+		if err != nil {
+			return err
+		}
+		return q.CreateTerminalEvent(ctx, evParams)
 	})
 	switch {
 	case constraintViolated(err, constraintTerminalSerial):
@@ -85,18 +97,39 @@ func (r *TerminalRepository) ListByStation(ctx context.Context, stationID string
 	return out, nil
 }
 
-// UpdateStatus is a single conditional UPDATE: it succeeds only if the status
-// is still "from". When no row matches, a second read tells a missing
-// terminal (ErrNotFound) from a concurrent change (ErrStatusChanged).
-func (r *TerminalRepository) UpdateStatus(ctx context.Context, id string, from, to terminal.Status, at time.Time) (terminal.Terminal, error) {
+// errNoRowUpdated signals inside the transaction that the conditional UPDATE
+// matched nothing, so the transaction is rolled back before investigating.
+var errNoRowUpdated = errors.New("no row updated")
+
+// UpdateStatus runs the conditional UPDATE and the event INSERT in one
+// transaction. The UPDATE succeeds only if the status is still from; if it
+// matches no row, a read after the rollback tells a missing terminal
+// (ErrNotFound) from a concurrent change (ErrStatusChanged).
+func (r *TerminalRepository) UpdateStatus(ctx context.Context, id string, from terminal.Status, ev terminal.Event) (terminal.Terminal, error) {
 	uid, err := uuid.Parse(id)
 	if err != nil {
 		return terminal.Terminal{}, terminal.ErrNotFound
 	}
-	row, err := r.q.UpdateTerminalStatus(ctx, db.UpdateTerminalStatusParams{
-		ID: uid, OldStatus: string(from), NewStatus: string(to), ChangedAt: at,
+	evParams, err := eventParams(ev)
+	if err != nil {
+		return terminal.Terminal{}, err
+	}
+
+	var updated db.Terminal
+	err = withTx(ctx, r.pool, func(q *db.Queries) error {
+		row, err := q.UpdateTerminalStatus(ctx, db.UpdateTerminalStatusParams{
+			ID: uid, OldStatus: string(from), NewStatus: string(ev.ToStatus), ChangedAt: ev.OccurredAt,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errNoRowUpdated
+		}
+		if err != nil {
+			return err
+		}
+		updated = row
+		return q.CreateTerminalEvent(ctx, evParams)
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, errNoRowUpdated) {
 		if _, getErr := r.Get(ctx, id); getErr != nil {
 			return terminal.Terminal{}, getErr
 		}
@@ -105,7 +138,59 @@ func (r *TerminalRepository) UpdateStatus(ctx context.Context, id string, from, 
 	if err != nil {
 		return terminal.Terminal{}, err
 	}
-	return toTerminal(row), nil
+	return toTerminal(updated), nil
+}
+
+// ListEvents returns the terminal's events, oldest first.
+func (r *TerminalRepository) ListEvents(ctx context.Context, terminalID string) ([]terminal.Event, error) {
+	uid, err := uuid.Parse(terminalID)
+	if err != nil {
+		return []terminal.Event{}, nil
+	}
+	rows, err := r.q.ListTerminalEvents(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]terminal.Event, 0, len(rows))
+	for _, row := range rows {
+		e := terminal.Event{
+			ID:         row.ID.String(),
+			TerminalID: row.TerminalID.String(),
+			Type:       terminal.EventType(row.Type),
+			ToStatus:   terminal.Status(row.ToStatus),
+			RequestID:  row.RequestID,
+			OccurredAt: row.OccurredAt.UTC(),
+		}
+		if row.FromStatus != nil {
+			e.FromStatus = terminal.Status(*row.FromStatus)
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func eventParams(ev terminal.Event) (db.CreateTerminalEventParams, error) {
+	id, err := uuid.Parse(ev.ID)
+	if err != nil {
+		return db.CreateTerminalEventParams{}, fmt.Errorf("event id: %w", err)
+	}
+	terminalID, err := uuid.Parse(ev.TerminalID)
+	if err != nil {
+		return db.CreateTerminalEventParams{}, fmt.Errorf("event terminal id: %w", err)
+	}
+	p := db.CreateTerminalEventParams{
+		ID:         id,
+		TerminalID: terminalID,
+		Type:       string(ev.Type),
+		ToStatus:   string(ev.ToStatus),
+		RequestID:  ev.RequestID,
+		OccurredAt: ev.OccurredAt,
+	}
+	if ev.FromStatus != "" {
+		from := string(ev.FromStatus)
+		p.FromStatus = &from
+	}
+	return p, nil
 }
 
 func toTerminal(row db.Terminal) terminal.Terminal {
