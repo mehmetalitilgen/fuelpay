@@ -110,4 +110,4 @@ RFC 9457 Problem Details, HTTP API'leri için standart bir hata gövdesi tanıml
 - `internal_error` dışındaki her kod istemci hatasıdır. `internal_error` gövdesi sabittir; asıl hata `slog.ErrorContext` ile log'lanır, böylece host adı veya SQL gibi iç detay istemciye sızmaz.
 - Zarf sözleşmesi testle korunuyor: `TestWriteErrorEnvelopeShape` ham JSON'u birebir karşılaştırır, `server_test.go` üst seviyede `error`'ın tek anahtar olduğunu doğrular. Zarf kaldırılırsa 16 test düşer.
 - Açık kalan nokta: `FieldErrors.Add` hâlâ serbest metin `issue` kabul ediyor (`"must not be empty"` gibi). `validation_failed` için de sabit bir issue kataloğu (`required`, `out_of_range`, `invalid_format` vb.) FTSM-005'te station API'sinin ilk gerçek doğrulama kurallarıyla birlikte belirlenecek.
-- `request_id` üst seviye alanı FTSM-004'te eklenecek. Zarf bunun için yer bırakıyor, format değişikliği gerekmeyecek.
+- `request_id` üst seviye alanı FTSM-004'te eklendi (bkz. [ADR 0004](0004-middleware-and-request-id.md)): `{"error": {...}, "request_id": "..."}`. Context'te ID yoksa alan yazılmaz.
