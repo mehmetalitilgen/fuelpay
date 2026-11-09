@@ -22,7 +22,7 @@ func cleanPool(t *testing.T) *pgxpool.Pool {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE terminals, stations"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE terminal_events, terminals, stations"); err != nil {
 		t.Fatal(err)
 	}
 	return pool
@@ -87,7 +87,7 @@ func TestTerminalRepository(t *testing.T) {
 			ID: newID(t), StationID: stationID, SerialNumber: fmt.Sprintf("S-00000%d", i), Model: "m",
 			Status: terminal.StatusPending, CreatedAt: ts(i), UpdatedAt: ts(i),
 		}
-		if err := repo.Create(ctx, term); err != nil {
+		if err := repo.Create(ctx, term, regEvent(t, term)); err != nil {
 			t.Fatalf("create %d: %v", i, err)
 		}
 		created = append(created, term)
@@ -113,12 +113,12 @@ func TestTerminalRepository(t *testing.T) {
 
 	dup := created[0]
 	dup.ID = newID(t)
-	if err := repo.Create(ctx, dup); !errors.Is(err, terminal.ErrSerialTaken) {
+	if err := repo.Create(ctx, dup, regEvent(t, dup)); !errors.Is(err, terminal.ErrSerialTaken) {
 		t.Errorf("duplicate serial: want ErrSerialTaken, got %v", err)
 	}
 	orphan := created[0]
 	orphan.ID, orphan.SerialNumber, orphan.StationID = newID(t), "S-999999", newID(t)
-	if err := repo.Create(ctx, orphan); !errors.Is(err, terminal.ErrStationNotFound) {
+	if err := repo.Create(ctx, orphan, regEvent(t, orphan)); !errors.Is(err, terminal.ErrStationNotFound) {
 		t.Errorf("unknown station: want ErrStationNotFound, got %v", err)
 	}
 }
@@ -132,24 +132,25 @@ func TestTerminalRepositoryUpdateStatus(t *testing.T) {
 	}
 	repo := NewTerminalRepository(pool)
 	term := terminal.Terminal{ID: newID(t), StationID: stationID, SerialNumber: "S-000001", Model: "m", Status: terminal.StatusPending, CreatedAt: ts(0), UpdatedAt: ts(0)}
-	if err := repo.Create(ctx, term); err != nil {
+	if err := repo.Create(ctx, term, regEvent(t, term)); err != nil {
 		t.Fatal(err)
 	}
 
-	active, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusPending, terminal.StatusActive, ts(1))
+	active, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusPending, changeEvent(t, term.ID, terminal.StatusPending, terminal.StatusActive, ts(1)))
 	if err != nil || active.Status != terminal.StatusActive || active.ActivatedAt == nil || !active.ActivatedAt.Equal(ts(1)) || !active.UpdatedAt.Equal(ts(1)) {
 		t.Fatalf("activate: got %+v (%v)", active, err)
 	}
 
 	// The stored status is now active, so a write expecting pending loses.
-	if _, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusPending, terminal.StatusDecommissioned, ts(2)); !errors.Is(err, terminal.ErrStatusChanged) {
+	if _, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusPending, changeEvent(t, term.ID, terminal.StatusPending, terminal.StatusDecommissioned, ts(2))); !errors.Is(err, terminal.ErrStatusChanged) {
 		t.Errorf("stale from: want ErrStatusChanged, got %v", err)
 	}
-	if _, err := repo.UpdateStatus(ctx, newID(t), terminal.StatusPending, terminal.StatusActive, ts(2)); !errors.Is(err, terminal.ErrNotFound) {
+	missingID := newID(t)
+	if _, err := repo.UpdateStatus(ctx, missingID, terminal.StatusPending, changeEvent(t, missingID, terminal.StatusPending, terminal.StatusActive, ts(2))); !errors.Is(err, terminal.ErrNotFound) {
 		t.Errorf("missing terminal: want ErrNotFound, got %v", err)
 	}
 
-	suspended, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusActive, terminal.StatusSuspended, ts(3))
+	suspended, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusActive, changeEvent(t, term.ID, terminal.StatusActive, terminal.StatusSuspended, ts(3)))
 	if err != nil || suspended.ActivatedAt == nil || !suspended.ActivatedAt.Equal(ts(1)) {
 		t.Errorf("suspend must keep activated_at: got %+v (%v)", suspended, err)
 	}
@@ -185,5 +186,86 @@ func TestTerminalServiceConcurrentTransitionsPostgres(t *testing.T) {
 	got, _ := terminals.Get(ctx, term.ID)
 	if got.Status != terminal.StatusActive {
 		t.Errorf("want active, got %s", got.Status)
+	}
+}
+
+func regEvent(t *testing.T, term terminal.Terminal) terminal.Event {
+	t.Helper()
+	return terminal.Event{ID: newID(t), TerminalID: term.ID, Type: terminal.EventRegistered, ToStatus: terminal.StatusPending, OccurredAt: term.CreatedAt}
+}
+
+func changeEvent(t *testing.T, terminalID string, from, to terminal.Status, at time.Time) terminal.Event {
+	t.Helper()
+	return terminal.Event{ID: newID(t), TerminalID: terminalID, Type: terminal.EventStatusChanged, FromStatus: from, ToStatus: to, RequestID: "req-1", OccurredAt: at}
+}
+
+func TestTerminalEventsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	pool := cleanPool(t)
+	stationID := newID(t)
+	if err := NewStationRepository(pool).Create(ctx, station.Station{ID: stationID, Code: "IST-1", Name: "n", City: "c", CreatedAt: ts(0)}); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewTerminalRepository(pool)
+	term := terminal.Terminal{ID: newID(t), StationID: stationID, SerialNumber: "S-000001", Model: "m", Status: terminal.StatusPending, CreatedAt: ts(0), UpdatedAt: ts(0)}
+	reg := regEvent(t, term)
+	if err := repo.Create(ctx, term, reg); err != nil {
+		t.Fatal(err)
+	}
+	change := changeEvent(t, term.ID, terminal.StatusPending, terminal.StatusActive, ts(1))
+	if _, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusPending, change); err != nil {
+		t.Fatal(err)
+	}
+	// A losing compare-and-set must not leave an event behind.
+	stale := changeEvent(t, term.ID, terminal.StatusPending, terminal.StatusDecommissioned, ts(2))
+	if _, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusPending, stale); !errors.Is(err, terminal.ErrStatusChanged) {
+		t.Fatalf("want ErrStatusChanged, got %v", err)
+	}
+
+	evs, err := repo.ListEvents(ctx, term.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evs) != 2 || evs[0] != reg || evs[1] != change {
+		t.Errorf("events: want [%+v %+v], got %+v", reg, change, evs)
+	}
+}
+
+// If the event cannot be written, the status change must roll back with it.
+func TestTerminalUpdateStatusIsAtomic(t *testing.T) {
+	ctx := context.Background()
+	pool := cleanPool(t)
+	stationID := newID(t)
+	if err := NewStationRepository(pool).Create(ctx, station.Station{ID: stationID, Code: "IST-1", Name: "n", City: "c", CreatedAt: ts(0)}); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewTerminalRepository(pool)
+	term := terminal.Terminal{ID: newID(t), StationID: stationID, SerialNumber: "S-000001", Model: "m", Status: terminal.StatusPending, CreatedAt: ts(0), UpdatedAt: ts(0)}
+	if err := repo.Create(ctx, term, regEvent(t, term)); err != nil {
+		t.Fatal(err)
+	}
+
+	// NOT VALID keeps existing rows but makes every new event insert fail.
+	if _, err := pool.Exec(ctx, "ALTER TABLE terminal_events ADD CONSTRAINT test_reject_inserts CHECK (false) NOT VALID"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "ALTER TABLE terminal_events DROP CONSTRAINT IF EXISTS test_reject_inserts")
+	})
+
+	if _, err := repo.UpdateStatus(ctx, term.ID, terminal.StatusPending, changeEvent(t, term.ID, terminal.StatusPending, terminal.StatusActive, ts(1))); err == nil {
+		t.Fatal("want the update to fail when the event cannot be written")
+	}
+	got, err := repo.Get(ctx, term.ID)
+	if err != nil || got.Status != terminal.StatusPending || got.ActivatedAt != nil {
+		t.Errorf("status change must be rolled back: got %+v (%v)", got, err)
+	}
+
+	other := terminal.Terminal{ID: newID(t), StationID: stationID, SerialNumber: "S-000002", Model: "m", Status: terminal.StatusPending, CreatedAt: ts(0), UpdatedAt: ts(0)}
+	if err := repo.Create(ctx, other, regEvent(t, other)); err == nil {
+		t.Fatal("want create to fail when the event cannot be written")
+	}
+	if _, err := repo.Get(ctx, other.ID); !errors.Is(err, terminal.ErrNotFound) {
+		t.Errorf("terminal must not exist without its event: %v", err)
 	}
 }

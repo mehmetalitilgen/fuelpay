@@ -46,17 +46,22 @@ var (
 	ErrStationNotFound = errors.New("station not found")
 )
 
-// Repository stores terminals. Create must enforce serial number uniqueness
-// atomically and return ErrSerialTaken on a duplicate.
+// Repository stores terminals and their audit trail. Every write stores the
+// change and its Event atomically: either both are saved or neither is.
 type Repository interface {
-	Create(ctx context.Context, t Terminal) error
+	// Create stores t with its "registered" event. It returns ErrSerialTaken
+	// if the serial number is already registered.
+	Create(ctx context.Context, t Terminal, ev Event) error
 	Get(ctx context.Context, id string) (Terminal, error)
 	ListByStation(ctx context.Context, stationID string) ([]Terminal, error)
-	// UpdateStatus sets the status to "to" only if it currently equals
-	// "from", and returns the updated terminal. It returns ErrStatusChanged
-	// when the stored status differs and ErrNotFound when there is no such
-	// terminal. Moving to active also sets ActivatedAt to at.
-	UpdateStatus(ctx context.Context, id string, from, to Status, at time.Time) (Terminal, error)
+	// UpdateStatus sets the status to ev.ToStatus only if it currently
+	// equals from, records ev, and returns the updated terminal. It returns
+	// ErrStatusChanged when the stored status differs and ErrNotFound when
+	// there is no such terminal. Moving to active also sets ActivatedAt to
+	// ev.OccurredAt.
+	UpdateStatus(ctx context.Context, id string, from Status, ev Event) (Terminal, error)
+	// ListEvents returns the terminal's events, oldest first.
+	ListEvents(ctx context.Context, terminalID string) ([]Event, error)
 }
 
 // StationGetter is the part of the station service this package needs.
@@ -106,10 +111,26 @@ func (s *Service) Register(ctx context.Context, p RegisterParams) (Terminal, err
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	if err := s.repo.Create(ctx, t); err != nil {
+	ev, err := newEvent(ctx, t.ID, EventRegistered, "", StatusPending, now)
+	if err != nil {
+		return Terminal{}, err
+	}
+	if err := s.repo.Create(ctx, t, ev); err != nil {
 		return Terminal{}, fmt.Errorf("register terminal: %w", err)
 	}
 	return t, nil
+}
+
+// Events returns the audit trail of a terminal, oldest first.
+func (s *Service) Events(ctx context.Context, terminalID string) ([]Event, error) {
+	if _, err := s.Get(ctx, terminalID); err != nil {
+		return nil, err
+	}
+	evs, err := s.repo.ListEvents(ctx, terminalID)
+	if err != nil {
+		return nil, fmt.Errorf("list terminal events: %w", err)
+	}
+	return evs, nil
 }
 
 // Get returns the terminal with the given ID.

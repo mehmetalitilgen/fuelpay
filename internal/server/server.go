@@ -47,6 +47,7 @@ func Routes(d Deps) http.Handler {
 	mux.HandleFunc("POST /v1/stations/{id}/terminals", terminals.register)
 	mux.HandleFunc("GET /v1/stations/{id}/terminals", terminals.listByStation)
 	mux.HandleFunc("GET /v1/terminals/{id}", terminals.get)
+	mux.HandleFunc("GET /v1/terminals/{id}/events", terminals.events)
 	mux.HandleFunc("POST /v1/terminals/{id}/activate", terminals.transition((*terminal.Service).Activate))
 	mux.HandleFunc("POST /v1/terminals/{id}/suspend", terminals.transition((*terminal.Service).Suspend))
 	mux.HandleFunc("POST /v1/terminals/{id}/decommission", terminals.transition((*terminal.Service).Decommission))

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mehmetalitilgen/fuelpay/internal/requestid"
 	"github.com/mehmetalitilgen/fuelpay/internal/station"
 )
 
@@ -135,11 +136,11 @@ type casRepo struct {
 	conflicts atomic.Int32
 }
 
-func (r *casRepo) UpdateStatus(ctx context.Context, id string, from, to Status, at time.Time) (Terminal, error) {
+func (r *casRepo) UpdateStatus(ctx context.Context, id string, from Status, ev Event) (Terminal, error) {
 	if r.conflicts.Add(-1) >= 0 {
 		return Terminal{}, ErrStatusChanged
 	}
-	return r.MemoryRepository.UpdateStatus(ctx, id, from, to, at)
+	return r.MemoryRepository.UpdateStatus(ctx, id, from, ev)
 }
 
 func TestTransitionRetriesOnConcurrentChange(t *testing.T) {
@@ -163,5 +164,50 @@ func TestTransitionRetriesOnConcurrentChange(t *testing.T) {
 	repo.conflicts.Store(maxCASAttempts)
 	if _, err := svc.Suspend(ctx, term.ID); !errors.Is(err, ErrStatusChanged) {
 		t.Errorf("want ErrStatusChanged after %d conflicts, got %v", maxCASAttempts, err)
+	}
+}
+
+func TestEventsRecordEveryChange(t *testing.T) {
+	ctx := requestid.NewContext(context.Background(), "req-42")
+	svc, stationID := newTestService(t)
+	term := register(t, svc, stationID)
+	for _, step := range []func(context.Context, string) (Terminal, error){svc.Activate, svc.Activate, svc.Suspend, svc.Decommission} {
+		if _, err := step(ctx, term.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A rejected transition must not leave an event behind.
+	if _, err := svc.Activate(ctx, term.ID); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("want ErrInvalidTransition, got %v", err)
+	}
+
+	evs, err := svc.Events(ctx, term.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct {
+		typ      EventType
+		from, to Status
+	}{
+		{EventRegistered, "", StatusPending},
+		{EventStatusChanged, StatusPending, StatusActive},
+		// the second Activate was a no-op: no event
+		{EventStatusChanged, StatusActive, StatusSuspended},
+		{EventStatusChanged, StatusSuspended, StatusDecommissioned},
+	}
+	if len(evs) != len(want) {
+		t.Fatalf("want %d events, got %d: %+v", len(want), len(evs), evs)
+	}
+	for i, w := range want {
+		e := evs[i]
+		if e.Type != w.typ || e.FromStatus != w.from || e.ToStatus != w.to || e.TerminalID != term.ID {
+			t.Errorf("event %d: want %s %s->%s, got %+v", i, w.typ, w.from, w.to, e)
+		}
+		if i > 0 && e.RequestID != "req-42" {
+			t.Errorf("event %d: want request_id req-42, got %q", i, e.RequestID)
+		}
+	}
+	if _, err := svc.Events(ctx, "missing"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("events of missing terminal: want ErrNotFound, got %v", err)
 	}
 }

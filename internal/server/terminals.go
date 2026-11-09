@@ -110,3 +110,17 @@ func terminalError(err error) error {
 	}
 	return err
 }
+
+type eventList struct {
+	Items []terminal.Event `json:"items"`
+}
+
+// events handles GET /v1/terminals/{id}/events: the audit trail, oldest first.
+func (h terminalHandlers) events(w http.ResponseWriter, r *http.Request) {
+	evs, err := h.svc.Events(r.Context(), r.PathValue("id"))
+	if err != nil {
+		httpjson.WriteError(w, r, terminalError(err))
+		return
+	}
+	httpjson.WriteJSON(w, http.StatusOK, eventList{Items: evs})
+}

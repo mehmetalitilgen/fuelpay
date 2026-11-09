@@ -77,7 +77,11 @@ func (s *Service) transition(ctx context.Context, id string, to Status) (Termina
 			return Terminal{}, &TransitionError{From: t.Status, To: to}
 		}
 
-		updated, err := s.repo.UpdateStatus(ctx, id, t.Status, to, s.timestamp())
+		ev, err := newEvent(ctx, id, EventStatusChanged, t.Status, to, s.timestamp())
+		if err != nil {
+			return Terminal{}, err
+		}
+		updated, err := s.repo.UpdateStatus(ctx, id, t.Status, ev)
 		if errors.Is(err, ErrStatusChanged) {
 			continue
 		}

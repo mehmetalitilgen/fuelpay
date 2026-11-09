@@ -29,3 +29,13 @@ type Terminal struct {
 	UpdatedAt    time.Time
 	ActivatedAt  *time.Time
 }
+
+type TerminalEvent struct {
+	ID         uuid.UUID
+	TerminalID uuid.UUID
+	Type       string
+	FromStatus *string
+	ToStatus   string
+	RequestID  string
+	OccurredAt time.Time
+}

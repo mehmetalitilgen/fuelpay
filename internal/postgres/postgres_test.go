@@ -50,7 +50,7 @@ func TestMigrationsUpDownUp(t *testing.T) {
 	if _, err := p.Up(ctx); err != nil {
 		t.Fatalf("up: %v", err)
 	}
-	for _, table := range []string{"stations", "terminals"} {
+	for _, table := range []string{"stations", "terminals", "terminal_events"} {
 		if !tableExists(t, pool, table) {
 			t.Errorf("table %s missing after up", table)
 		}
@@ -59,7 +59,7 @@ func TestMigrationsUpDownUp(t *testing.T) {
 	if _, err := p.DownTo(ctx, 0); err != nil {
 		t.Fatalf("down: %v", err)
 	}
-	for _, table := range []string{"stations", "terminals"} {
+	for _, table := range []string{"stations", "terminals", "terminal_events"} {
 		if tableExists(t, pool, table) {
 			t.Errorf("table %s still exists after down", table)
 		}
@@ -80,7 +80,7 @@ func TestSchemaConstraints(t *testing.T) {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE terminals, stations"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE terminal_events, terminals, stations"); err != nil {
 		t.Fatal(err)
 	}
 

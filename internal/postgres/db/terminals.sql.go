@@ -40,6 +40,34 @@ func (q *Queries) CreateTerminal(ctx context.Context, arg CreateTerminalParams) 
 	return err
 }
 
+const createTerminalEvent = `-- name: CreateTerminalEvent :exec
+INSERT INTO terminal_events (id, terminal_id, type, from_status, to_status, request_id, occurred_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type CreateTerminalEventParams struct {
+	ID         uuid.UUID
+	TerminalID uuid.UUID
+	Type       string
+	FromStatus *string
+	ToStatus   string
+	RequestID  string
+	OccurredAt time.Time
+}
+
+func (q *Queries) CreateTerminalEvent(ctx context.Context, arg CreateTerminalEventParams) error {
+	_, err := q.db.Exec(ctx, createTerminalEvent,
+		arg.ID,
+		arg.TerminalID,
+		arg.Type,
+		arg.FromStatus,
+		arg.ToStatus,
+		arg.RequestID,
+		arg.OccurredAt,
+	)
+	return err
+}
+
 const getTerminal = `-- name: GetTerminal :one
 SELECT id, station_id, serial_number, model, status, created_at, updated_at, activated_at
 FROM terminals
@@ -60,6 +88,41 @@ func (q *Queries) GetTerminal(ctx context.Context, id uuid.UUID) (Terminal, erro
 		&i.ActivatedAt,
 	)
 	return i, err
+}
+
+const listTerminalEvents = `-- name: ListTerminalEvents :many
+SELECT id, terminal_id, type, from_status, to_status, request_id, occurred_at
+FROM terminal_events
+WHERE terminal_id = $1
+ORDER BY occurred_at, id
+`
+
+func (q *Queries) ListTerminalEvents(ctx context.Context, terminalID uuid.UUID) ([]TerminalEvent, error) {
+	rows, err := q.db.Query(ctx, listTerminalEvents, terminalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TerminalEvent
+	for rows.Next() {
+		var i TerminalEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.TerminalID,
+			&i.Type,
+			&i.FromStatus,
+			&i.ToStatus,
+			&i.RequestID,
+			&i.OccurredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTerminalsByStation = `-- name: ListTerminalsByStation :many
