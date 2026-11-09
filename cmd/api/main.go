@@ -24,7 +24,7 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
-	if err := run(signalContext(), logger, level, server.Routes(version), nil); err != nil {
+	if err := run(signalContext(), logger, level, server.Routes(version, logger), nil); err != nil {
 		logger.Error("application terminated", "err", err)
 		os.Exit(1)
 	}
