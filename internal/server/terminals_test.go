@@ -103,3 +103,50 @@ func TestRegisterTerminalErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalLifecycle(t *testing.T) {
+	srv := httptest.NewServer(Routes(testDeps()))
+	defer srv.Close()
+	stationID := newStation(t, srv, "IST-1")
+	reg := call(t, srv, http.MethodPost, "/v1/stations/"+stationID+"/terminals", `{"serial_number":"S-000001","model":"m"}`)
+	base := "/v1/terminals/" + reg.str("id")
+
+	steps := []struct {
+		action     string
+		wantStatus int
+		wantState  string
+		wantDetail []string
+	}{
+		{"suspend", 409, "", []string{"status:invalid_transition"}},
+		{"activate", 200, "active", nil},
+		{"activate", 200, "active", nil}, // repeating is a no-op
+		{"suspend", 200, "suspended", nil},
+		{"activate", 200, "active", nil},
+		{"decommission", 200, "decommissioned", nil},
+		{"activate", 409, "", []string{"status:invalid_transition"}},
+		{"decommission", 200, "decommissioned", nil},
+	}
+	for i, s := range steps {
+		res := call(t, srv, http.MethodPost, base+"/"+s.action, "")
+		if res.Status != s.wantStatus {
+			t.Fatalf("step %d %s: want %d, got %d %s", i, s.action, s.wantStatus, res.Status, res.Raw)
+		}
+		if s.wantState != "" && res.str("status") != s.wantState {
+			t.Errorf("step %d %s: want status %s, got %s", i, s.action, s.wantState, res.str("status"))
+		}
+		if s.wantDetail != nil && (res.errorCode() != "conflict" || !slices.Equal(res.details(), s.wantDetail)) {
+			t.Errorf("step %d %s: want conflict %v, got %s", i, s.action, s.wantDetail, res.Raw)
+		}
+	}
+
+	got := call(t, srv, http.MethodGet, base, "")
+	if got.str("activated_at") == "" {
+		t.Errorf("activated_at should be set after activation: %s", got.Raw)
+	}
+	if res := call(t, srv, http.MethodPost, "/v1/terminals/missing/activate", ""); res.Status != http.StatusNotFound {
+		t.Errorf("activate missing: want 404, got %d", res.Status)
+	}
+	if res := call(t, srv, http.MethodGet, base+"/activate", ""); res.Status != http.StatusMethodNotAllowed {
+		t.Errorf("GET activate: want 405, got %d", res.Status)
+	}
+}

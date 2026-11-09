@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/mehmetalitilgen/fuelpay/internal/httpjson"
@@ -69,14 +71,42 @@ func (h terminalHandlers) listByStation(w http.ResponseWriter, r *http.Request) 
 	httpjson.WriteJSON(w, http.StatusOK, terminalList{Items: ts})
 }
 
+// transition returns a handler for POST /v1/terminals/{id}/<action>. The
+// request has no body; the response is the terminal after the change.
+func (h terminalHandlers) transition(apply func(*terminal.Service, context.Context, string) (terminal.Terminal, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		t, err := apply(h.svc, r.Context(), r.PathValue("id"))
+		if err != nil {
+			httpjson.WriteError(w, r, terminalError(err))
+			return
+		}
+		httpjson.WriteJSON(w, http.StatusOK, t)
+	}
+}
+
 // terminalError maps terminal domain errors to API errors. Unknown errors are
 // returned unchanged so WriteError logs them and answers 500.
 func terminalError(err error) error {
+	var te *terminal.TransitionError
 	switch {
 	case errors.Is(err, terminal.ErrNotFound), errors.Is(err, terminal.ErrStationNotFound):
 		return errNotFound
 	case errors.Is(err, terminal.ErrSerialTaken):
 		return conflict("serial_number", "A terminal with this serial number is already registered.")
+	case errors.As(err, &te):
+		return &httpjson.Error{
+			Status:  http.StatusConflict,
+			Code:    "conflict",
+			Message: fmt.Sprintf("Terminal status cannot change from %s to %s.", te.From, te.To),
+			Details: []httpjson.FieldError{{Field: "status", Issue: issueInvalidTransition}},
+		}
+	case errors.Is(err, terminal.ErrStatusChanged):
+		return &httpjson.Error{
+			Status:  http.StatusConflict,
+			Code:    "conflict",
+			Message: "Terminal status was changed by another request; retry.",
+			Details: []httpjson.FieldError{{Field: "status", Issue: issueConcurrentUpdate}},
+		}
 	}
 	return err
 }

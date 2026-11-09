@@ -57,6 +57,8 @@ Dış zarfı tercih etme sebebimiz, üst seviyenin ileride kardeş alanlara aç�
 | `too_short` / `too_long` | Uzunluk sınırı dışında (FTSM-005) |
 | `invalid_format` | Değer beklenen biçimde değil, örn. küçük harfli istasyon kodu (FTSM-005) |
 | `already_exists` | `conflict` ile birlikte: değer başka bir kayıtta kullanılıyor (FTSM-005) |
+| `invalid_transition` | `conflict` ile birlikte: durum makinesinde olmayan geçiş (FTSM-007) |
+| `concurrent_update` | `conflict` ile birlikte: optimistic concurrency denemeleri tükendi (FTSM-007) |
 
 Gövde parse hatalarının hepsinin tek bir `invalid_json` kodu altında toplanması bilinçli. İstemci açısından bunların hepsi aynı sonucu doğurur: gövdeyi düzelt ve tekrar gönder. Her alt durum için ayrı kod üretmek (`empty_body`, `malformed_json`, `unknown_field`, ...) istemciye davranış farkı sağlamayan bir switch yazdırır, ama kataloğu ve dolayısıyla API sözleşmesini şişirir. Ayrım gereken yerde `details[].issue` ve `message` zaten mevcut.
 

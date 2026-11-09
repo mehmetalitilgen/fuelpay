@@ -52,6 +52,11 @@ type Repository interface {
 	Create(ctx context.Context, t Terminal) error
 	Get(ctx context.Context, id string) (Terminal, error)
 	ListByStation(ctx context.Context, stationID string) ([]Terminal, error)
+	// UpdateStatus sets the status to "to" only if it currently equals
+	// "from", and returns the updated terminal. It returns ErrStatusChanged
+	// when the stored status differs and ErrNotFound when there is no such
+	// terminal. Moving to active also sets ActivatedAt to at.
+	UpdateStatus(ctx context.Context, id string, from, to Status, at time.Time) (Terminal, error)
 }
 
 // StationGetter is the part of the station service this package needs.

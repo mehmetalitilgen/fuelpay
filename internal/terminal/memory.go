@@ -5,7 +5,28 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 )
+
+// UpdateStatus is a compare-and-set on the status under the write lock.
+func (m *MemoryRepository) UpdateStatus(_ context.Context, id string, from, to Status, at time.Time) (Terminal, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.byID[id]
+	if !ok {
+		return Terminal{}, ErrNotFound
+	}
+	if t.Status != from {
+		return Terminal{}, ErrStatusChanged
+	}
+	t.Status = to
+	t.UpdatedAt = at
+	if to == StatusActive {
+		t.ActivatedAt = &at
+	}
+	m.byID[id] = t
+	return t, nil
+}
 
 // MemoryRepository is an in-memory Repository, safe for concurrent use.
 type MemoryRepository struct {
