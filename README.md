@@ -40,6 +40,44 @@ Geçersiz değerler varsa servis port açmadan çıkar (exit code `1`) ve hatala
 > Not: Servis `.env` dosyasını kendisi okumaz. Oradaki değerleri kullanmak için
 > değişkenleri çalıştırmadan önce kabuğa aktarın (aşağıdaki örneklere bakın).
 
+## Veritabanı
+
+Geliştirme için PostgreSQL 18, Docker Compose ile çalışır (port `5433`, lokal bir
+PostgreSQL kurulumuyla çakışmasın diye):
+
+```sh
+docker compose up -d
+```
+
+Şema migration'ları [goose](https://github.com/pressly/goose) ile yazılır, SQL dosyaları
+`internal/postgres/migrations/` altındadır ve binary'ye gömülür:
+
+```sh
+# bash
+export DATABASE_URL="postgres://fuelpay:fuelpay@localhost:5433/fuelpay?sslmode=disable"
+go run ./cmd/migrate up       # bekleyen migration'ları uygula
+go run ./cmd/migrate status   # durumu listele
+go run ./cmd/migrate down     # son migration'ı geri al
+```
+
+```powershell
+# PowerShell
+$env:DATABASE_URL = "postgres://fuelpay:fuelpay@localhost:5433/fuelpay?sslmode=disable"
+go run ./cmd/migrate up
+```
+
+Yeni migration: `internal/postgres/migrations/` altına sıradaki numarayla
+(`00002_aciklama.sql`) `-- +goose Up` / `-- +goose Down` bölümlerini içeren bir dosya ekleyin.
+Uygulanmış bir migration dosyası **değiştirilmez**; düzeltme yeni bir migration ile yapılır.
+
+Veritabanı testleri `TEST_DATABASE_URL` tanımlıysa çalışır, değilse atlanır. Bu veritabanı
+testler tarafından silinip yeniden kurulur; geliştirme veritabanını vermeyin:
+
+```sh
+docker compose exec postgres createdb -U fuelpay fuelpay_test
+TEST_DATABASE_URL="postgres://fuelpay:fuelpay@localhost:5433/fuelpay_test?sslmode=disable" go test ./...
+```
+
 ## Çalıştırma
 
 Varsayılan adresle (`:8080`):

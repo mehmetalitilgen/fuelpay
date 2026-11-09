@@ -1,0 +1,21 @@
+# Local development dependencies. Start with: docker compose up -d
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: fuelpay
+      POSTGRES_PASSWORD: fuelpay
+      POSTGRES_DB: fuelpay
+    ports:
+      - "5433:5432" # 5433 so it does not clash with a locally installed PostgreSQL
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/<major>/.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuelpay -d fuelpay"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  postgres-data:
